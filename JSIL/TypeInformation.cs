@@ -565,7 +565,16 @@ namespace JSIL.Internal {
                         continue;
 
                     if (field.HasConstant)
-                        enumValue = Convert.ToInt64(field.Constant);
+                    {
+                        try
+                        {
+                            enumValue = Convert.ToInt64(field.Constant);
+                        }
+                        catch (OverflowException ex)
+                        {
+                            enumValue = (long) Convert.ToUInt64(field.Constant);
+                        }
+                    }
 
                     var info = new EnumMemberInfo(type, field.Name, enumValue);
 
