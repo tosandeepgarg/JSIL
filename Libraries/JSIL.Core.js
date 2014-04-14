@@ -1116,7 +1116,7 @@ JSIL.DefineTypeName = function (name, getter, isPublic) {
 
       JSIL.Host.warning(
         "Public type '" + name + "' defined twice: " + 
-        existingAssembly.toString() + " and " + 
+        (existingAssembly ? (existingAssembly.toString() + " and ") : "") +
         $private.toString()
       );
 
