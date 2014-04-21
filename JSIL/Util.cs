@@ -262,9 +262,8 @@ namespace JSIL.Internal {
             return sb.ToString();
         }
 
-        public static string DemangleCecilTypeName (string typeName)
-        {
-            return typeName; //typeName.Replace("/", "+");
+        public static string DemangleCecilTypeName (string typeName) {
+            return typeName.Replace("/", "+");
         }
 
         public sealed class ListSkipAdapter<T> : IList<T> {
