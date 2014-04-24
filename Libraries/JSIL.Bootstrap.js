@@ -1906,6 +1906,18 @@ JSIL.MakeStruct("System.ValueType", "System.Decimal", true, [], function ($) {
       return this.value.toString();
     }
   );
+    
+  $jsilcore.$MakeParseExternals($, $.Type,
+      function(text, style) {
+          return numberToDecimal($jsilcore.$ParseFloat(text, style));
+      }, function (text, result) {
+          var temp = new JSIL.BoxedVariable(null);
+          if ($jsilcore.$TryParseFloat(text, temp)) {
+              result.set(numberToDecimal(temp.get()));
+              return true;
+          }
+          return false;
+      });
 
   $.Method({Static:false, Public:true }, ".ctor", 
     (new JSIL.MethodSignature(null, [mscorlib.TypeRef("System.Int32")], [])),
