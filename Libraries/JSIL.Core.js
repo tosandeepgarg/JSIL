@@ -7883,7 +7883,7 @@ JSIL.GetEqualsSignature = function () {
   return JSIL.$equalsSignature;
 }
 
-JSIL.ObjectEquals = function (lhs, rhs) {
+JSIL.ObjectEquals = function (lhs, rhs, instance) {
   if ((lhs === null) || (rhs === null))
     return lhs === rhs;
   if (lhs === rhs)
@@ -7896,13 +7896,20 @@ JSIL.ObjectEquals = function (lhs, rhs) {
       break;
 
     case "object":
-      var key = JSIL.GetEqualsSignature().GetKey("Object_Equals");
-      var fn = lhs[key];
+        if (instance !== true || lhs.__IsInsideEquals__ === undefined) {
+            
+            var key = JSIL.GetEqualsSignature().GetKey("Object_Equals");
+            var fn = lhs[key];
 
-      if (fn)
-        return fn.call(lhs, rhs);
+            if (fn) {
+                lhs.__IsInsideEquals__ = true;
+                var result = fn.call(lhs, rhs);
+                delete lhs.__IsInsideEquals__;
+                return result;
+            }
+        }
 
-      break;
+        break;
   }
 
   return false;
@@ -7942,14 +7949,18 @@ if (typeof (WeakMap) !== "undefined") {
   };
 }
 
-JSIL.ObjectHashCode = function (obj) {
+JSIL.ObjectHashCode = function (obj, instance) {
   var type = typeof obj;
 
   if (type === "object") {
-    if (obj.GetHashCode)
-      return (obj.GetHashCode() | 0);
+      if ((instance !== true || obj.__IsInsideHashCode__ === undefined) && obj.GetHashCode) {
+          obj.__IsInsideHashCode__ = true;
+          var result = (obj.GetHashCode() | 0);
+          delete obj.__IsInsideHashCode__;
+          return result;
+      }
 
-    return JSIL.HashCodeInternal(obj);
+      return JSIL.HashCodeInternal(obj);
   } else {
     // FIXME: Not an integer. Gross.
     return String(obj);

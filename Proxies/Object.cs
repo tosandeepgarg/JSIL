@@ -42,4 +42,33 @@ namespace JSIL.Proxies {
             throw new InvalidOperationException();
         }
     }
+
+    [JSProxy(
+    typeof(Object),
+    memberPolicy: JSProxyMemberPolicy.ReplaceNone,
+    attributePolicy: JSProxyAttributePolicy.ReplaceDeclared,
+    inheritable: false)]
+    public abstract class ObjectGetHashCodeProxy
+    {
+        [JSReplacement("JSIL.ObjectEquals($this, $obj, true)")]
+        public new abstract bool Equals(object obj);
+
+        [JSReplacement("JSIL.ObjectHashCode($this, true)")]
+        public new abstract int GetHashCode();
+    }
+
+    [JSProxy(
+        new[]
+            {
+                typeof(SByte), typeof(Int16), typeof(Int32),
+                typeof(Byte), typeof(UInt16), typeof(UInt32),
+                typeof(String)
+            },
+        memberPolicy: JSProxyMemberPolicy.ReplaceNone,
+        attributePolicy: JSProxyAttributePolicy.ReplaceDeclared)]
+    public abstract class JSTypesGetHashCodeProxy
+    {
+        [JSReplacement("JSIL.ObjectHashCode($this, true)")]
+        public new abstract int GetHashCode();
+    }
 }
