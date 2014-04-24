@@ -161,9 +161,23 @@ namespace JSIL.Proxies {
             throw new InvalidOperationException();
         }
 
+        [JSReplacement("System.String.StartsWith($this, $text, $comparison)")]
+        [JSIsPure]
+        public bool StartsWith(string text, StringComparison comparison)
+        {
+            throw new InvalidOperationException();
+        }
+
         [JSReplacement("System.String.EndsWith($this, $text)")]
         [JSIsPure]
         public bool EndsWith (string text) {
+            throw new InvalidOperationException();
+        }
+
+        [JSReplacement("System.String.EndsWith($this, $text, $comparison)")]
+        [JSIsPure]
+        public bool EndsWith(string text, StringComparison comparison)
+        {
             throw new InvalidOperationException();
         }
 

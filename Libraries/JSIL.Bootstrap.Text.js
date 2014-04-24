@@ -415,16 +415,20 @@ JSIL.ImplementExternals(
         return (typeof (value) === "string");
       }
     );
+      
+    var prepareCaseInsesitive = function (str, comparison) {
+        switch (comparison.valueOf() && str !== null) {
+            case 1: // System.StringComparison.CurrentCultureIgnoreCase:
+            case 3: // System.StringComparison.InvariantCultureIgnoreCase:
+            case 5: // System.StringComparison.OrdinalIgnoreCase:
+                return str.toLowerCase();
+        }
+        return str;
+    };
 
     var compareInternal = function (lhs, rhs, comparison) {
-      switch (comparison.valueOf()) {
-        case 1: // System.StringComparison.CurrentCultureIgnoreCase:
-        case 3: // System.StringComparison.InvariantCultureIgnoreCase:
-        case 5: // System.StringComparison.OrdinalIgnoreCase:
-          lhs = lhs.toLowerCase();
-          rhs = rhs.toLowerCase();
-          break;
-      }
+      lhs = prepareCaseInsesitive(lhs, comparison);
+      rhs = prepareCaseInsesitive(rhs, comparison);
 
       if (lhs < rhs)
         return -1;
@@ -433,6 +437,8 @@ JSIL.ImplementExternals(
       else
         return 0;
     };
+      
+
 
     $.Method({Static:true , Public:true }, "Compare", 
       new JSIL.MethodSignature($jsilcore.TypeRef("System.Int32"), [$jsilcore.TypeRef("System.String"), $jsilcore.TypeRef("System.String")], []),
@@ -452,6 +458,21 @@ JSIL.ImplementExternals(
             System.StringComparison.OrdinalIgnoreCase : 
             System.StringComparison.Ordinal
         );
+      }
+    );
+      
+    $.Method({ Static: true, Public: true }, "Compare",
+      new JSIL.MethodSignature($jsilcore.TypeRef("System.Int32"), [
+          $jsilcore.TypeRef("System.String"), $jsilcore.TypeRef("System.Int32"),
+          $jsilcore.TypeRef("System.String"), $jsilcore.TypeRef("System.Int32"),
+          $jsilcore.TypeRef("System.Int32"), $jsilcore.TypeRef("System.StringComparison")
+      ], []),
+      function (lhs, indexA, rhs, indexB, length, comparator) {
+          lhs = lhs === null ? null : lhs.substr(indexA, length);
+          rhs = rhs === null ? null : rhs.substr(indexB, length);
+          return compareInternal(
+            lhs, rhs, comparator
+          );
       }
     );
 
@@ -487,7 +508,14 @@ JSIL.ImplementExternals(
         return str.lastIndexOf(text) === str.length - text.length;
       }
     );
-
+      
+    $.Method({ Static: true, Public: true }, "EndsWith",
+      new JSIL.MethodSignature($jsilcore.TypeRef("System.Boolean"), [$jsilcore.TypeRef("System.String"), $jsilcore.TypeRef("System.String"), $jsilcore.TypeRef("System.StringComparison")], []),
+      function (str, text, comparison) {
+          return this.EndsWith(prepareCaseInsesitive(str), prepareCaseInsesitive(text));
+      }
+    );
+      
     //                             index   alignment      valueFormat    escape
     var formatRegex = new RegExp("{([0-9]*)(?:,([-0-9]*))?(?::([^}]*))?}|{{|}}|{|}", "g");
 
@@ -621,6 +649,13 @@ JSIL.ImplementExternals(
       new JSIL.MethodSignature("System.Boolean", ["System.String", "System.String"], [], $jsilcore),
       function (str, text) {
         return str.indexOf(text) === 0;
+      }
+    );
+      
+    $.Method({ Static: true, Public: true }, "StartsWith",
+      new JSIL.MethodSignature($jsilcore.TypeRef("System.Boolean"), [$jsilcore.TypeRef("System.String"), $jsilcore.TypeRef("System.String"), $jsilcore.TypeRef("System.StringComparison")], []),
+      function (str, text, comparison) {
+          return this.StartsWith(prepareCaseInsesitive(str), prepareCaseInsesitive(text));
       }
     );
 
