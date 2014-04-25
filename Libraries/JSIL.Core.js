@@ -868,6 +868,9 @@ JSIL.AngleGroupRegex = /\<([^<>]*)\>/g;
 JSIL.EscapedNameCharacterRegex = /[\.\/\+\`\~\:\<\>\(\)\{\}\[\]\@\-\=\?\!\*\ \&\,\|\']/g;
 
 JSIL.EscapeName = function (name) {
+  if ((!name) || (typeof (name) !== "string"))
+    throw new Error("EscapeName only accepts a string");
+
   // FIXME: It sucks that this has to manually duplicate the C# escape logic.
 
   name = name.replace(JSIL.AngleGroupRegex, function (match, group1) {
@@ -1842,6 +1845,9 @@ JSIL.MakeProto = function (baseType, typeObject, typeName, isReferenceType, asse
   var baseTypePublicInterface = _[0];
   var baseTypeObject = _[1];
 
+  if (baseTypePublicInterface === Object)
+    baseTypeObject = null;
+
   var prototype = JSIL.$GetSpecialType(typeName).prototype;
   if (!prototype)
     prototype = JSIL.CreatePrototypeObject(baseTypePublicInterface.prototype);
@@ -2081,6 +2087,7 @@ JSIL.FindGenericParameters = function (obj, type, resultList) {
     currentType = currentType.__BaseType__;
     if (
       (typeof(currentType) === "object") && 
+      (currentType !== null) &&
       (Object.getPrototypeOf(currentType) === JSIL.TypeRef.prototype)
     )
       currentType = currentType.get().__Type__;
@@ -4999,14 +5006,27 @@ JSIL.MakeType = function (typeArgs, initializer) {
       publicInterface: staticClassObject
     };
 
-    typeObject.__BaseType__ = JSIL.ResolveTypeReference(baseType, assembly)[1];
-    var baseTypeName = typeObject.__BaseType__.__FullName__ || baseType.toString();
-    var baseTypeInterfaces = typeObject.__BaseType__.__Interfaces__ || [];
+    if (fullName !== "System.Object") {
+      typeObject.__BaseType__ = JSIL.ResolveTypeReference(baseType, assembly)[1];
 
-    // HACK: We can't do this check before creating the constructor, because recursion. UGH.
-    typeObject.__IsStruct__ = typeObject.__IsStruct__ && (baseTypeName === "System.ValueType");
+      var baseTypeName = typeObject.__BaseType__.__FullName__ || baseType.toString();
+      var baseTypeInterfaces = typeObject.__BaseType__.__Interfaces__ || [];
 
-    typeObject.__InheritanceDepth__ = (typeObject.__BaseType__.__InheritanceDepth__ || 0) + 1;
+      // HACK: We can't do this check before creating the constructor, because recursion. UGH.
+      typeObject.__IsStruct__ = typeObject.__IsStruct__ && (baseTypeName === "System.ValueType");
+      typeObject.__InheritanceDepth__ = (typeObject.__BaseType__.__InheritanceDepth__ || 0) + 1;
+      typeObject.__Interfaces__ = Array.prototype.slice.call(baseTypeInterfaces);
+      typeObject.__ExternalMethods__ = Array.prototype.slice.call(typeObject.__BaseType__.__ExternalMethods__ || []);
+      typeObject.__RenamedMethods__ = JSIL.CreateDictionaryObject(typeObject.__BaseType__.__RenamedMethods__ || null);
+    } else {
+      typeObject.__BaseType__ = null;
+      typeObject.__IsStruct__ = false;
+      typeObject.__InheritanceDepth__ = 0;
+      typeObject.__Interfaces__ = [];
+      typeObject.__ExternalMethods__ = Array.prototype.slice.call([]);
+      typeObject.__RenamedMethods__ = JSIL.CreateDictionaryObject(null);
+    }
+
     typeObject.__IsArray__ = false;
     typeObject.__FieldList__ = $jsilcore.ArrayNotInitialized;
     typeObject.__FieldInitializer__ = $jsilcore.FunctionNotInitialized;
@@ -5018,7 +5038,6 @@ JSIL.MakeType = function (typeArgs, initializer) {
     typeObject.__ElementProxyConstructor__ = $jsilcore.FunctionNotInitialized;
     typeObject.__Properties__ = [];
     typeObject.__Initializers__ = [];
-    typeObject.__Interfaces__ = Array.prototype.slice.call(baseTypeInterfaces);
     typeObject.__TypeInitialized__ = false;
     typeObject.__IsNativeType__ = false;
     typeObject.__AssignableTypes__ = null;
@@ -5027,12 +5046,8 @@ JSIL.MakeType = function (typeArgs, initializer) {
     typeObject.__LockCount__ = 0;
     typeObject.__Members__ = [];
     // FIXME: I'm not sure this is right. See InheritedExternalStubError.cs
-    typeObject.__ExternalMethods__ = Array.prototype.slice.call(typeObject.__BaseType__.__ExternalMethods__ || []);
     typeObject.__Attributes__ = memberBuilder.attributes;
     typeObject.__RanCctors__ = false;
-
-    typeObject.__RenamedMethods__ = JSIL.CreateDictionaryObject(typeObject.__BaseType__.__RenamedMethods__ || null);
-
     typeObject.__RawMethods__ = [];
 
     JSIL.FillTypeObjectGenericArguments(typeObject, genericArguments);
@@ -5811,6 +5826,8 @@ JSIL.InterfaceBuilder = function (context, typeObject, publicInterface, builderM
       return "<" + this.Name + " Descriptor>";
     }
   };
+
+  this.anonymousMemberCount = 0;
 };
 
 JSIL.InterfaceBuilder.prototype.DefineTypeAliases = function (getAssembly, names) {
@@ -5858,6 +5875,11 @@ JSIL.InterfaceBuilder.prototype.SetValue = function (key, value) {
 };
 
 JSIL.InterfaceBuilder.prototype.ParseDescriptor = function (descriptor, name, signature) {
+  if (name === null) {
+    name = "anonymous$" + this.anonymousMemberCount;
+    this.anonymousMemberCount += 1;
+  }
+
   var result = JSIL.CreateDictionaryObject(this.memberDescriptorPrototype);
 
   var escapedName = JSIL.EscapeName(name);
@@ -5886,7 +5908,8 @@ JSIL.InterfaceBuilder.prototype.ParseDescriptor = function (descriptor, name, si
 
   result.SpecialName = (name == ".ctor") || (name == "_ctor") ||
     (name.indexOf(".cctor") === 0) ||
-    (name.indexOf("_cctor") === 0);
+    (name.indexOf("_cctor") === 0) ||
+    (name.indexOf("op_") === 0);
 
   JSIL.SetValueProperty(
     result, "Target", 
@@ -5908,13 +5931,17 @@ JSIL.InterfaceBuilder.prototype.PushMember = function (type, descriptor, data, m
 
   // Throw if two members with identical signatures and names are added
   if (data.signature) {
-    var existingMembersWithSameName = members.filter(function (m) {
-      return (m.descriptor.EscapedName == descriptor.EscapedName);
-    });
+    var includeReturnType =
+      descriptor.SpecialName;
 
-    var existingMembersWithSameNameAndSignature = existingMembersWithSameName.filter(function (m) {
-      return m.data.signature && 
-        (m.data.signature.GetKey() == data.signature.GetKey());
+    var existingMembersWithSameNameAndSignature = members.filter(function (m) {
+      if (!m.data.signature)
+        return false;
+
+      var sig1 = m.data.signature.GetKey(m.descriptor.EscapedName, includeReturnType);
+      var sig2 = data.signature.GetKey(descriptor.EscapedName, includeReturnType);
+
+      return (sig1 == sig2);
     });
 
     if (existingMembersWithSameNameAndSignature.length > 0) {
@@ -5922,7 +5949,15 @@ JSIL.InterfaceBuilder.prototype.PushMember = function (type, descriptor, data, m
         // No need to push this, the external is already implemented. Cool!
       } else {
         // This means that we accidentally implemented the same method twice, or something equally terrible.
-        JSIL.RuntimeError("A member with the signature '" + data.signature.toString(descriptor.EscapedName) + "' has already been declared in the type '" + this.typeObject.__FullName__ + "'.");
+        var msgPrefix = includeReturnType ? 
+          "A member with the signature '" :
+          "A member with the name and argument list '";
+
+        JSIL.RuntimeError(
+          msgPrefix + data.signature.toString(descriptor.EscapedName, includeReturnType) + 
+          "' has already been declared in the type '" + 
+          this.typeObject.__FullName__ + "'."
+        );
       }
     }
   }
@@ -6399,7 +6434,12 @@ JSIL.InterfaceBuilder.prototype.ImplementInterfaces = function (/* ...interfaces
     JSIL.RuntimeError("Type has no interface list");
 
   for (var i = 0; i < arguments.length; i++) {
-    interfaces.push(arguments[i]);
+    var iface = arguments[i];
+
+    if (!iface)
+      throw new Error("Nonexistent interface passed to ImplementInterfaces");
+
+    interfaces.push(iface);
   }
 };
 
@@ -6408,12 +6448,18 @@ JSIL.SignatureBase = function () {
   JSIL.RuntimeError("Abstract base class");
 };
 
-JSIL.SignatureBase.prototype.GetKey = function (name) {
-  if (name === this._lastKeyName)
+JSIL.SignatureBase.prototype.GetKey = function (name, includeReturnType) {
+  if ((name === this._lastKeyName) && (includeReturnType !== false))
     return this._lastKey;
 
-  this._lastKeyName = name;
-  return this._lastKey = (name + this.get_Hash());
+  var result = (name + this.get_Hash(includeReturnType));
+
+  if (includeReturnType !== false) {
+    this._lastKeyName = name;
+    this._lastKey = result;
+  }
+
+  return result;
 };
 
 JSIL.SignatureBase.prototype.ResolveTypeReference = function (typeReference) {
@@ -6445,6 +6491,7 @@ JSIL.MethodSignature = function (returnType, argumentTypes, genericArgumentNames
   this._lastKey = "<null>";
   this._genericSuffix = null;
   this._hash = null;
+  this._hashIncludesReturnType = null;
 
   this.context = context || $private;
   this.returnType = returnType;
@@ -6495,10 +6542,12 @@ JSIL.MethodSignature.prototype.Resolve = function (name) {
   );
 };
 
-JSIL.MethodSignature.prototype.toString = function (name) {
+JSIL.MethodSignature.prototype.toString = function (name, includeReturnType) {
   var signature;
 
-  if (this.returnType !== null) {
+  if (includeReturnType === false) {
+    signature = "";
+  } else if (this.returnType !== null) {
     signature = JSIL.TypeReferenceToName(this.returnType) + " ";
   } else {
     signature = "void ";
@@ -6668,19 +6717,23 @@ JSIL.MethodSignature.prototype.get_GenericSuffix = function () {
   return this._genericSuffix = "";
 };
 
-JSIL.MethodSignature.prototype.get_Hash = function () {
-  if (this._hash !== null)
+JSIL.MethodSignature.prototype.get_Hash = function (includeReturnType) {
+  if ((this._hash !== null) && (this._hashIncludesReturnType === includeReturnType))
     return this._hash;
 
   var hash = "$" + JSIL.HashTypeArgumentArray(this.argumentTypes, this.context);
 
-  if (this.returnType !== null) {
+  if ((this.returnType !== null) && (includeReturnType !== false)) {
     hash += "=" + JSIL.HashTypeArgumentArray([this.returnType], this.context);
   } else {
-    hash += "=void";
+    if (includeReturnType !== false)
+      hash += "=void";
   }
 
-  return this._hash = hash;
+  this._hash = hash;
+  this._hashIncludesReturnType = includeReturnType;
+
+  return hash;
 };
 
 JSIL.MethodSignature.prototype.get_IsClosed = function () {
@@ -6748,7 +6801,7 @@ JSIL.ConstructorSignature.prototype.get_Type = function () {
   return this._typeObject = this.ResolveTypeReference(this.type)[1];
 };
 
-JSIL.ConstructorSignature.prototype.get_Hash = function () {
+JSIL.ConstructorSignature.prototype.get_Hash = function (includeReturnType) {
   if (this._hash !== null)
     return this._hash;
 
@@ -6976,7 +7029,7 @@ JSIL.InterfaceMethod.prototype.LookupMethod = function (thisReference) {
   }
 
   if (!result) {
-    result = this.fallbackMethod ? this.fallbackMethod(this.typeObject) : null;
+    result = this.fallbackMethod(this.signature, thisReference);
   }
 
   if (!result) {
@@ -8621,24 +8674,24 @@ JSIL.$GenerateVariantInvocationCandidates = function (interfaceObject, signature
   return result;
 };
 
-JSIL.$GetEnumeratorFallback = function (thisTypeObject) {
-    var interfaceTypeObject = thisTypeObject;
-    return function() {
-        if (typeof(this) === "string")
-            return JSIL.GetEnumerator(this, $jsilcore.System.Char.__Type__, true);
-        else if (JSIL.IsArray(this)) {
-            if (interfaceTypeObject.IsGenericType) {
-                // Looks like we find correct type ???
-                return JSIL.GetEnumerator(this, thisTypeObject.__GenericArgumentValues__[0], true);
-            }
-            // HACK: Too hard to detect the correct element type here.
-            return JSIL.GetEnumerator(this, $jsilcore.System.Object.__Type__, true);
-        } else
-            JSIL.RuntimeError("Object of type '" + JSIL.GetType(this) + "' has no implementation of GetEnumerator");
-    };
+JSIL.$GetStringEnumerator = function () {
+    return JSIL.GetEnumerator(this, $jsilcore.System.Char.__Type__, true);  
 };
 
-// FIXME: This can probably be replaced with compiler and/or runtime intelligence 
+JSIL.$GetEnumeratorFallback = function (signature, thisReference) {
+  if (typeof (thisReference) === "string") {
+    return JSIL.$GetStringEnumerator;
+  } else if (JSIL.IsArray(thisReference)) {
+    var enumeratorTypeArgument = $jsilcore.System.Object.__Type__;
+    if (this.typeObject.IsGenericType) {
+      enumeratorTypeArgument = this.typeObject.__GenericArgumentValues__[0];
+    }
+    return function () { return JSIL.GetEnumerator(this, enumeratorTypeArgument, true); };
+  } else
+    JSIL.RuntimeError("Object of type '" + JSIL.GetType(this) + "' has no implementation of " + signature.toString("GetEnumerator"));
+};
+
+// FIXME: This can probably be replaced with compiler and/or runtime intelltypeigence 
 //  to create interface overlays for strings, just like arrays.
 JSIL.$PickFallbackMethodForInterfaceMethod = function (interfaceObject, methodName, signature) {
   // HACK: Ensures that you can enumerate the chars of a JS string or array in cases where they lack an overlay.
