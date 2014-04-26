@@ -2743,7 +2743,11 @@ JSIL.FixupInterfaces = function (publicInterface, typeObject) {
   if (typeObject.IsInterface)
     return;
 
-  var interfaces = JSIL.GetInterfacesImplementedByType(typeObject);
+  // This is the table of interfaces that is used by .Overrides' numeric indices.
+  var indexedInterfaceTable = JSIL.GetInterfacesImplementedByType(typeObject, false, false);
+
+  // This is the table of every interface we actually implement (exhaustively).
+  var interfaces = JSIL.GetInterfacesImplementedByType(typeObject, true, false);
 
   if (!interfaces.length)
     return;
@@ -2921,28 +2925,45 @@ JSIL.FixupInterfaces = function (publicInterface, typeObject) {
       var iface = null;
 
       switch (typeof (override.interfaceIndexOrName)) {
+        // TODO: Accept typerefs
+
         case "string":
           // If the index is a string, search all the interfaces implemented by this type for a substring match.
-          // FIXME: If there are multiple matches this picks the first one. Probably not great...
 
-          for (var k = 0; k < interfaces.length; k++) {
-            if (interfaces[k].__FullName__.indexOf(override.interfaceIndexOrName) >= 0) {
-              iface = interfaces[k];
-              break;
-            }
+          var matchingInterfaces = interfaces.filter(function (iface) {
+            return iface.__FullName__.indexOf(override.interfaceIndexOrName) >= 0;
+          });
+
+          if (matchingInterfaces.length > 1) {
+            // TODO: Enable this warning?
+            /*
+            JSIL.RuntimeError(
+              "Member '" + member._descriptor.EscapedName + 
+              "' overrides interface '" + override.interfaceIndexOrName + 
+              "' but " + matchingInterfaces.length + " interfaces match that name: \r\n" +
+              "\r\n".join(matchingInterfaces)
+            );
+            */
+            iface = matchingInterfaces[0];
+          } else if (matchingInterfaces.length === 0) {
+            iface = null;
+          } else {
+            iface = matchingInterfaces[0];
           }
 
-          if (iface === null)
-            JSIL.RuntimeError("Interface index '" + override.interfaceIndexOrName + "' does not match any interfaces");
-
           break;
+
         case "number":
-          iface = interfaces[override.interfaceIndexOrName];
+          iface = indexedInterfaceTable[override.interfaceIndexOrName];
           break;
       }
 
       if (!iface)
-        JSIL.RuntimeError("Member '" + member._descriptor.EscapedName + "' overrides nonexistent interface of type '" + typeObject.__FullName__ + "' with index '" + override.interfaceIndexOrName + "'");
+        JSIL.RuntimeError(
+          "Member '" + member._descriptor.EscapedName + 
+          "' overrides nonexistent interface of type '" + typeObject.__FullName__ + 
+          "' with index '" + override.interfaceIndexOrName + "'"
+        );
 
       var interfaceQualifiedName = JSIL.$GetSignaturePrefixForType(iface) + JSIL.EscapeName(override.interfaceMemberName);
       var key = member._data.signature.GetKey(interfaceQualifiedName);
@@ -7012,10 +7033,10 @@ JSIL.InterfaceMethod.prototype.LookupMethod = function (thisReference) {
   if (!thisReference)
     JSIL.RuntimeError("Attempting to invoke interface method named '" + this.methodName + "' on null/undefined object");
 
-  var result = thisReference[this.methodKey];
+  var result = null;
   var variantInvocationCandidates = null;
 
-  if (!result && this.variantGenericArguments.length) {
+  if (this.variantGenericArguments.length) {
     variantInvocationCandidates = this.GetVariantInvocationCandidates(thisReference);
 
     if (variantInvocationCandidates)
@@ -7026,9 +7047,14 @@ JSIL.InterfaceMethod.prototype.LookupMethod = function (thisReference) {
       if (result)
         break;
     }
+
+    if (!result)
+      result = thisReference[this.methodKey];
+  } else {
+    result = thisReference[this.methodKey];
   }
 
-  if (!result) {
+  if (!result && this.fallbackMethod) {
     result = this.fallbackMethod(this.typeObject, this.signature, thisReference);
   }
 
@@ -8458,20 +8484,41 @@ JSIL.$EnumBasesOfType = function (typeObject, resultList) {
   }
 };
 
-JSIL.GetInterfacesImplementedByType = function (typeObject) {
+JSIL.GetInterfacesImplementedByType = function (typeObject, walkInterfaceBases, allowDuplicates, includeDistance) {
   // FIXME: Memoize the result of this function?
+
+  if (arguments.length < 3)
+    JSIL.RuntimeError("3 arguments expected");
 
   var typeAndBases = JSIL.GetTypeAndBases(typeObject);
   var result = [];
+  var distanceList = [];
+
+  // Walk in reverse to match the behavior of JSIL.Internal.TypeInfo.AllInterfacesRecursive
+  typeAndBases.reverse();
 
   for (var i = 0, l = typeAndBases.length; i < l; i++) {
-    JSIL.$EnumInterfacesImplementedByTypeExcludingBases(typeAndBases[i], result);
+    var typeObject = typeAndBases[i];
+    var distance = (typeAndBases.length - i - 1);
+
+    JSIL.$EnumInterfacesImplementedByTypeExcludingBases(
+      typeObject, result, distanceList, walkInterfaceBases, allowDuplicates, distance
+    );
   }
 
-  return result;
+  if (includeDistance)
+    return {
+      interfaces: result,
+      distances: distanceList
+    };
+  else
+    return result;
 };
 
-JSIL.$EnumInterfacesImplementedByTypeExcludingBases = function (typeObject, resultList) {
+JSIL.$EnumInterfacesImplementedByTypeExcludingBases = function (typeObject, resultList, distanceList, walkInterfaceBases, allowDuplicates, distance) {
+  if (arguments.length !== 6)
+    JSIL.RuntimeError("6 arguments expected");
+
   var interfaces = typeObject.__Interfaces__;
 
   var toEnumerate = [];
@@ -8480,17 +8527,26 @@ JSIL.$EnumInterfacesImplementedByTypeExcludingBases = function (typeObject, resu
     for (var i = 0, l = interfaces.length; i < l; i++) {
       var ifaceRef = interfaces[i];
       var iface = JSIL.ResolveTypeReference(ifaceRef, typeObject.__Context__)[1];
+      if (!iface)
+        continue;
 
-      if (iface && (resultList.indexOf(iface) < 0)) {
+      var alreadyAdded = resultList.indexOf(iface) >= 0;
+
+      if (!alreadyAdded || allowDuplicates) {
         resultList.push(iface);
-        toEnumerate.push(iface);
+
+        if (distanceList)
+          distanceList.push(distance);
       }
+
+      if (!alreadyAdded && walkInterfaceBases)
+        toEnumerate.push(iface);
     }
   }
 
   for (var i = 0, l = toEnumerate.length; i < l; i++) {
     var iface = toEnumerate[i];
-    JSIL.$EnumInterfacesImplementedByTypeExcludingBases(iface, resultList);
+    JSIL.$EnumInterfacesImplementedByTypeExcludingBases(iface, resultList, distanceList, walkInterfaceBases, allowDuplicates, distance + 1);
   }
 };
 
@@ -8500,8 +8556,20 @@ JSIL.$FindMatchingInterfacesThroughVariance = function (expectedInterfaceObject,
 
   var trace = 0;
 
+  var record = function (distance, iface) {
+    this.distance = distance;
+    this.interface = iface;
+  };
+
+  record.prototype.toString = function () {
+    return "<" + this.interface.toString() + " (distance " + this.distance + ")>";
+  };
+
   // We have to scan exhaustively through all the interfaces implemented by this type
-  var interfaces = JSIL.GetInterfacesImplementedByType(actualTypeObject);
+  // We turn on distance tracking, so the interface records are [distance, interface] instead of interface objects.
+  var obj = JSIL.GetInterfacesImplementedByType(actualTypeObject, true, false, true);
+  var interfaces = obj.interfaces;
+  var distances = obj.distances;
 
   if (trace >= 2)
     System.Console.WriteLine("Type {0} implements {1} interface(s): [ {2} ]", actualTypeObject.__FullName__, interfaces.length, interfaces.join(", "));
@@ -8513,6 +8581,7 @@ JSIL.$FindMatchingInterfacesThroughVariance = function (expectedInterfaceObject,
   // Scan for interfaces that could potentially match through variance
   for (var i = 0, l = interfaces.length; i < l; i++) {
     var iface = interfaces[i];
+    var distance = distances[i];
 
     var openIface = iface.__OpenType__;
 
@@ -8536,14 +8605,14 @@ JSIL.$FindMatchingInterfacesThroughVariance = function (expectedInterfaceObject,
 
       if (vp.in) {
         var typeAndBasesLhs = JSIL.GetTypeAndBases(lhs);
-        foundIndex = typeAndBasesLhs.indexOf(rhs)
+        foundIndex = typeAndBasesLhs.indexOf(rhs);
         if (foundIndex < 0)
           ifaceResult = parameterResult = false;
       } 
 
       if (vp.out) {
         var typeAndBasesRhs = JSIL.GetTypeAndBases(rhs);
-        foundIndex = typeAndBasesRhs.indexOf(lhs) < 0;
+        foundIndex = typeAndBasesRhs.indexOf(lhs);
         if (foundIndex < 0)
           ifaceResult = parameterResult = false;
       }
@@ -8557,7 +8626,7 @@ JSIL.$FindMatchingInterfacesThroughVariance = function (expectedInterfaceObject,
     }
 
     if (ifaceResult)
-      result.push(iface);
+      result.push(new record(distance, iface));
   }
 
   return result;
@@ -8657,16 +8726,26 @@ JSIL.$GenerateVariantInvocationCandidates = function (interfaceObject, signature
 
   var result = [];
 
+  // Sort the interfaces by distance, in increasing order.
+  // This is necessary for the implementation-selection behavior used by the CLR in cases where
+  //  there are multiple candidates due to variance. See issue #445.
+  matchingInterfaces.sort(function (lhs, rhs) {
+    return JSIL.CompareValues(lhs.distance, rhs.distance);
+  });
+
   generate_candidates:
   for (var i = 0, l = matchingInterfaces.length; i < l; i++) {
-    var matchingInterface = matchingInterfaces[i];
+    var record = matchingInterfaces[i];
 
     // FIXME: This is incredibly expensive.
     var variantSignature = JSIL.$ResolveGenericMethodSignature(
-      matchingInterface, signature.openSignature, matchingInterface.__PublicInterface__
+      record.interface, signature.openSignature, record.interface.__PublicInterface__
     );
 
     var candidate = variantSignature.GetKey(qualifiedMethodName);
+
+    if (trace)
+      System.Console.WriteLine("Candidate (distance {0}): {1}", record.distance, candidate);
 
     result.push(candidate);
   }
