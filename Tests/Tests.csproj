@@ -278,7 +278,14 @@
     <None Include="SimpleTestCases\Issue427.cs" />
     <None Include="SimpleTestCases\Issue452.cs" />
     <None Include="SimpleTestCases\Issue453.cs" />
-    <Compile Include="SimpleTestCases\Issue445.cs" />
+    <None Include="SimpleTestCases\Issue372.cs" />
+    <None Include="SimpleTestCases\Issue425.cs" />
+    <None Include="SimpleTestCases\Issue445.cs" />
+    <None Include="SimpleTestCases\Issue410.cs" />
+    <None Include="SimpleTestCases\Issue411.cs" />
+    <None Include="SimpleTestCases\Issue459.cs" />
+    <None Include="SimpleTestCases\Issue464.cs" />
+    <None Include="SimpleTestCases\Issue378_2.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />
@@ -840,6 +847,12 @@
     <None Include="TestCases\DictionaryInterfaces.cs" />
     <None Include="SimpleTestCases\TypedArrayEnumerator_Issue353.cs" />
     <None Include="SimpleTestCases\VarianceCast_Issue443.cs" />
+    <None Include="SimpleTestCases\RecursiveTypeConstruction_Issue394.cs" />
+    <None Include="SimpleTestCases\ReflectionInvokeStructParameters_Issue449.cs" />
+    <None Include="SimpleTestCases\Issue354.cs" />
+    <None Include="SimpleTestCases\Issue364_1.cs" />
+    <None Include="SimpleTestCases\Issue364_2.cs" />
+    <None Include="SimpleTestCases\Issue364_3.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\JSIL\JSIL.csproj">

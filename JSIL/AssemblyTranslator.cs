@@ -44,6 +44,8 @@ namespace JSIL {
 
         public const int LargeMethodThreshold = 20 * 1024;
 
+        public const int DefaultStreamCapacity = 4 * (1024 * 1024);
+
         public readonly Configuration Configuration;
 
         public readonly SymbolProvider SymbolProvider = new SymbolProvider();
@@ -452,7 +454,7 @@ namespace JSIL {
                 long existingSize;
 
                 if (!Manifest.GetExistingSize(assembly, out existingSize)) {
-                    using (var outputStream = new MemoryStream()) {
+                    using (var outputStream = new MemoryStream(DefaultStreamCapacity)) {
                         var context = MakeDecompilerContext(assembly.MainModule);
 
                         try {
@@ -1100,21 +1102,21 @@ namespace JSIL {
                     output.NewLine();
                     return;
                 } else if (typedef.IsInterface) {
-                    output.Comment("interface {0}", typedef.FullName);
+                    output.Comment("interface {0}", Util.DemangleCecilTypeName(typedef.FullName));
                     output.NewLine();
                     output.NewLine();
 
                     TranslateInterface(context, astEmitter, output, typedef);
                     return;
                 } else if (typedef.IsEnum) {
-                    output.Comment("enum {0}", typedef.FullName);
+                    output.Comment("enum {0}", Util.DemangleCecilTypeName(typedef.FullName));
                     output.NewLine();
                     output.NewLine();
 
                     TranslateEnum(context, output, typedef);
                     return;
                 } else if (typeInfo.IsDelegate) {
-                    output.Comment("delegate {0}", typedef.FullName);
+                    output.Comment("delegate {0}", Util.DemangleCecilTypeName(typedef.FullName));
                     output.NewLine();
                     output.NewLine();
 
@@ -1138,7 +1140,7 @@ namespace JSIL {
                 }
 
                 if (!makingSkeletons) {
-                    output.Comment("{0} {1}", typedef.IsValueType ? "struct" : "class", typedef.FullName);
+                    output.Comment("{0} {1}", typedef.IsValueType ? "struct" : "class", Util.DemangleCecilTypeName(typedef.FullName));
                     output.NewLine();
                     output.NewLine();
 
@@ -1903,7 +1905,8 @@ namespace JSIL {
                         defaultValue is JSInvocationExpressionBase ||
                         defaultValue is JSNewArrayExpression ||
                         defaultValue is JSEnumLiteral ||
-                        defaultValue is JSCastExpression
+                        defaultValue is JSCastExpression ||
+                        defaultValue is JSTypeOfExpression
                     )
                 ) {
                     // We have to represent the default value as a callable function, taking a single
@@ -2657,6 +2660,8 @@ namespace JSIL {
                 output.NewLine();
                 output.RPar();
 
+                astEmitter.ReferenceContext.AttributesMethod = methodRef;
+
                 TranslateOverrides(context, methodInfo.DeclaringType, method, methodInfo, astEmitter, output);
 
                 TranslateCustomAttributes(context, method.DeclaringType, method, astEmitter, output);
@@ -2687,14 +2692,7 @@ namespace JSIL {
                     output.Identifier("Overrides");
                     output.LPar();
 
-                    var interfaces = typeInfo.AllInterfacesRecursive.Where((tuple) =>
-                      (!tuple.ImplementedInterface.Info.IsIgnored));
-
-                    var interfaceIndex = interfaces.TakeWhile((tuple) =>
-                      !TypeUtil.TypesAreEqual(tuple.ImplementedInterface.Reference, @override.InterfaceType)).Count();
-
-                    // TODO: Deprecate numeric indices entirely. They are a mess.
-                    output.Value(interfaceIndex);
+                    output.TypeReference(@override.InterfaceType, astEmitter.ReferenceContext);
 
                     output.Comma();
                     output.Value(@override.MemberIdentifier.Name);
