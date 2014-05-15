@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata>
     <id>JSIL.Compiler</id>
-    <version>0.0.20140514.1915</version>
+    <version>0.0.20140514.1950</version>
     <authors>Igor Kiselev</authors>
     <description>JSIL compiler</description>
     <language>en-US</language>
@@ -19,6 +19,7 @@
 	<file src="bin\JSIL.Proxies.4.0.dll" target="tools" />
 	<file src="bin\JSILc.exe" target="tools" />
 	<file src="bin\JSILc.exe.config" target="tools" />
+	<file src="bin\JSIL.Analysis.DCE.dll" target="tools" />
 	<file src="bin\Mono.Cecil.dll" target="tools" />
 	<file src="bin\Mono.Cecil.Mdb.dll" target="tools" />
 	<file src="bin\Mono.Cecil.Pdb.dll" target="tools" />
