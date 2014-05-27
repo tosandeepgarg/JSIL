@@ -355,7 +355,11 @@ namespace JSIL.Internal {
                 if ((method.Name == ".cctor") && method.CustomAttributes.Any((ca) => ca.AttributeType.FullName == "JSIL.Meta.JSExtraStaticConstructor")) {
                     ExtraStaticConstructor = method;
                 } else {
-                    Methods.Add(new MemberIdentifier(typeInfo, method), method);
+                    var key = new MemberIdentifier(typeInfo, method);
+                    if (Methods.ContainsKey(key))
+                        throw new InvalidOperationException("Proxy '" + proxyType.FullName + "' contains multiple matches for member '" + key.ToString());
+                    else
+                        Methods.Add(key, method);
                 }
             }
         }
@@ -683,7 +687,7 @@ namespace JSIL.Internal {
 
                     // The constructor may be compiler-generated, so only replace if it has the attribute.
                     if ((method.Name == ".ctor") && (method.Parameters.Count == 0)) {
-                        if (!method.CustomAttributes.Any((ca) => ca.AttributeType.FullName == "JSIL.Meta.JSReplaceConstructor"))
+                        if (!method.CustomAttributes.Any((ca) => ca.AttributeType.FullName == "JSIL.Proxy.JSReplaceConstructor"))
                             continue;
                     }
 
