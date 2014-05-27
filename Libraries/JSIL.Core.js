@@ -343,11 +343,14 @@ JSIL.$GetSpecialType = function (name) {
   JSIL.TypeObjectPrototype.get_IsEnum = function() { 
     return this.__IsEnum__; 
   };
+  JSIL.TypeObjectPrototype.get_ContainsGenericParameters = function() { 
+    return this.__IsClosed__ === false; 
+  };
   JSIL.TypeObjectPrototype.get_IsGenericType = function() { 
-    return this.__OpenType__ !== undefined || this.__IsClosed__ === false; 
+    return (this.__OpenType__ !== undefined || this.__IsClosed__ === false) && !(this instanceof JSIL.GenericParameter); 
   };
   JSIL.TypeObjectPrototype.get_IsGenericTypeDefinition = function() { 
-    return this.__IsClosed__ === false; 
+    return this.__IsClosed__ === false && this.__GenericArgumentValues__ === undefined && !(this instanceof JSIL.GenericParameter); 
   };
   JSIL.TypeObjectPrototype.get_IsValueType = function() { 
     return this.__IsValueType__; 
@@ -4061,6 +4064,13 @@ JSIL.$BuildMethodGroups = function (typeObject, publicInterface, forceLazyMethod
 
     JSIL.$ApplyMemberHiding(typeObject, methodList, resolveContext);
   }
+  
+  var record = function (distance, signature) {
+    this.distance = distance;
+    this.signature = signature;
+  };
+  
+  var typesHiearchy = JSIL.GetTypeAndBases(typeObject); 
 
   for (var key in methodsByName) {
     var methodList = methodsByName[key];
@@ -4070,12 +4080,23 @@ JSIL.$BuildMethodGroups = function (typeObject, publicInterface, forceLazyMethod
     var isStatic = methodList[0]._descriptor.Static;
     var signature = methodList[0]._data.signature;
 
-    var entries = [];
+    var entriesToSort = []; 
 
     for (var i = 0, l = methodList.length; i < l; i++) {
-      var method = methodList[i];
+       var method = methodList[i];
+       entriesToSort.push(new record(typesHiearchy.indexOf(method._typeObject), method._data.signature));
+    }
+    
+    entriesToSort.sort(function (lhs, rhs) {
+      return JSIL.CompareValues(lhs.distance, rhs.distance);
+    });
 
-      entries.push(method._data.signature);
+    var entries = [];
+
+    for (var i = 0, l = entriesToSort.length; i < l; i++) {
+      var method = entriesToSort[i];
+
+      entries.push(method.signature);
     }
 
     var target = isStatic ? publicInterface : publicInterface.prototype;
@@ -6617,7 +6638,7 @@ JSIL.SignatureBase.prototype.LookupMethod = function (context, name) {
 };
 
 
-JSIL.MethodSignature = function (returnType, argumentTypes, genericArgumentNames, context, openSignature) {
+JSIL.MethodSignature = function (returnType, argumentTypes, genericArgumentNames, context, openSignature, genericArgumentValues) {
   this._lastKeyName = "<null>";
   this._lastKey = "<null>";
   this._genericSuffix = null;
@@ -6643,6 +6664,10 @@ JSIL.MethodSignature = function (returnType, argumentTypes, genericArgumentNames
     this.genericArgumentNames = $jsilcore.ArrayNull;
 
   this.openSignature = openSignature || null;
+
+  if (JSIL.IsArray(genericArgumentValues)){
+    this.genericArgumentValues = genericArgumentValues;
+  }
 };
 
 JSIL.MethodSignature.prototype = JSIL.CreatePrototypeObject(JSIL.SignatureBase.prototype);
@@ -8984,12 +9009,15 @@ JSIL.$PickFallbackMethodForInterfaceMethod = function (interfaceObject, methodNa
 JSIL.$DoTypesMatch = function (expected, type) {
   if (expected === null)
     return (type === null);
-
+  
   if (expected === type)
     return true;
 
   if (expected.__FullName__ === "System.Array")
     return type.__IsArray__;
+
+  if (expected instanceof JSIL.PositionalGenericParameter && type instanceof JSIL.PositionalGenericParameter && expected.index === type.index)
+    return true;
 
   return false;
 }
@@ -9044,7 +9072,7 @@ JSIL.$FilterMethodsByArgumentTypes = function (methods, argumentTypes, returnTyp
   methods.length = l;
 };
 
-JSIL.$GetMethodImplementation = function (method) {
+JSIL.$GetMethodImplementation = function (method, target) {
   var isStatic = method._descriptor.Static;
   var isInterface = method._typeObject.IsInterface;
   var key = isInterface
@@ -9061,7 +9089,12 @@ JSIL.$GetMethodImplementation = function (method) {
       if (!result.signature.IsClosed)
         throw new Error("Generic method is not closed");
   }
-
+  if (method._data.signature.genericArgumentValues) {
+    if (isStatic) {
+       return result.apply(method.DeclaringType.__PublicInterface__, method._data.signature.genericArgumentValues).bind(method.DeclaringType.__PublicInterface__);
+    }
+    return result.apply(target, method._data.signature.genericArgumentValues);
+  }
   return result;
 };
 
