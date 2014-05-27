@@ -463,6 +463,7 @@ namespace JSIL.Internal {
         protected bool _MethodGroupsInitialized = false;
 
         protected List<NamedMethodSignature> DeferredMethodSignatureSetUpdates = new List<NamedMethodSignature>();
+        protected List<NamedMethodSignature> DeferredStaticMethodSignatureSetUpdates = new List<NamedMethodSignature>();
 
         public TypeInfo (ITypeInfoSource source, ModuleInfo module, TypeDefinition type, TypeInfo declaringType, TypeInfo baseClass, TypeIdentifier identifier) {
             Identifier = identifier;
@@ -740,8 +741,11 @@ namespace JSIL.Internal {
                 }
             }
 
-            //DeferredMethodSignatureSetUpdates.Clear();
-            //DeferredMethodSignatureSetUpdates = null;
+            foreach (var nms in DeferredStaticMethodSignatureSetUpdates)
+            {
+                var set = MethodSignatures.GetOrCreateFor(nms.Name);
+                set.Add(nms);
+            }
         }
 
         public bool IsFullyInitialized {
@@ -1156,8 +1160,12 @@ namespace JSIL.Internal {
             if (!Members.TryAdd(identifier, result))
                 throw new InvalidOperationException();
 
-            DeferredMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
-
+            if (method.IsStatic || method.IsConstructor) {
+                DeferredStaticMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            }
+            else {
+                DeferredMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            }
             return (MethodInfo)result;
         }
 
@@ -1171,7 +1179,12 @@ namespace JSIL.Internal {
             if (!Members.TryAdd(identifier, result))
                 throw new InvalidOperationException();
 
-            DeferredMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            if (method.IsStatic || method.IsConstructor) {
+                DeferredStaticMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            }
+            else {
+                DeferredMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            }
 
             return (MethodInfo)result;
         }
@@ -1188,8 +1201,12 @@ namespace JSIL.Internal {
 
             if (method.Name == ".cctor")
                 StaticConstructor = method;
-
-            DeferredMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            if (method.IsStatic || method.IsConstructor) {
+                DeferredStaticMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            }
+            else {
+                DeferredMethodSignatureSetUpdates.Add(((MethodInfo)result).NamedSignature);
+            }
 
             return (MethodInfo)result;
         }
