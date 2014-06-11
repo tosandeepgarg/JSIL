@@ -580,6 +580,7 @@ namespace JSIL {
 
         public void VisitNode (JSTruncateExpression te) {
             Output.LPar();
+
             Output.LPar();
             Visit(te.Expression);
             Output.RPar();
@@ -587,6 +588,20 @@ namespace JSIL {
             var expressionType = te.Expression.GetActualType(TypeSystem);
             WriteTruncationForType(expressionType);
 
+            Output.RPar();
+        }
+
+        public void VisitNode (JSIntegerToFloatExpression itfe) {
+            Output.WriteRaw("+");
+            Output.LPar();
+            Visit(itfe.Expression);
+            Output.RPar();
+        }
+
+        public void VisitNode (JSDoubleToFloatExpression itfe) {
+            Output.WriteRaw("Math.fround");
+            Output.LPar();
+            Visit(itfe.Expression);
             Output.RPar();
         }
 
@@ -1359,7 +1374,8 @@ namespace JSIL {
                 if (
                     Configuration.CodeGenerator.HintDoubleArithmetic.GetValueOrDefault(true) &&
                     TypeUtil.IsFloatingPoint(resultType) &&
-                    !(resultType is ByReferenceType)
+                    !(resultType is ByReferenceType) &&
+                    !(ret.Value is JSSpecialNumericCastExpression)
                 ) {
                     Output.WriteRaw("+");
                 }
@@ -1458,7 +1474,7 @@ namespace JSIL {
                 return false;
             else if (ParentNode is JSCommaExpression)
                 return false;
-            else if (ParentNode is JSTruncateExpression)
+            else if (ParentNode is JSSpecialNumericCastExpression)
                 return false;
 
             return true;
@@ -1552,7 +1568,8 @@ namespace JSIL {
                 Configuration.CodeGenerator.HintDoubleArithmetic.GetValueOrDefault(true) &&
                 (bop.Operator is JSAssignmentOperator) &&
                 TypeUtil.IsFloatingPoint(resultType) &&
-                !(resultType is ByReferenceType)
+                !(resultType is ByReferenceType) &&
+                !(bop.Right is JSSpecialNumericCastExpression)
             ) {
                 Output.WriteRaw("+");
             }

@@ -1246,17 +1246,27 @@ JSIL.MakeExternalMemberStub = function (namespaceName, getMemberName, inheritedM
       return Function.prototype.apply.call(inheritedMember, this, arguments);
     };
   } else {
+    var msg = null;
+    
     result = function ExternalMemberStub () {
-      if (state.warningCount > 3)
+      if (state.warningCount > 3) {
+        msg = null;
         return;
+      }
 
       state.warningCount += 1;
-      var msg = "The external method '" + getMemberName.call(this) + "' of type '" + namespaceName + "' has not been implemented.";
-      var err = new Error(msg);
+      var self = this;
+      var getError = function () {
+        if (msg === null)
+          msg = "The external method '" + getMemberName.call(self) + "' of type '" + namespaceName + "' has not been implemented.";
+
+        return new Error(msg);
+      };
 
       if (JSIL.ThrowOnUnimplementedExternals) {
-        JSIL.Host.abort(err);
+        JSIL.Host.abort(getError());
       } else {
+        var err = getError();
         if (typeof (err.stack) !== "undefined") {
           if (err.stack.indexOf(err.toString()) === 0)
             msg = err.stack;
@@ -1264,6 +1274,7 @@ JSIL.MakeExternalMemberStub = function (namespaceName, getMemberName, inheritedM
             msg += "\n" + err.stack;
         }
 
+        err = null;
         JSIL.Host.warning(msg);
       }
     };
@@ -7900,7 +7911,12 @@ JSIL.CreateInstanceOfType = function (type, constructorName, constructorArgument
   if (!recordSet)
     recordSet = JSIL.$CreateInstanceOfTypeTable[type.__TypeId__] = new JSIL.CreateInstanceOfTypeRecordSet(type);
 
-  if (JSIL.IsArray(constructorName) || (typeof (constructorName) === "undefined")) {
+  // FIXME: This gets used a lot, so make constructorName a required argument
+  //  if arguments are provided.
+  if (
+    JSIL.IsArray(constructorName) || 
+    (typeof (constructorName) === "undefined")
+  ) {
     constructorArguments = constructorName;
     constructorName = "_ctor";
   }
@@ -9275,8 +9291,12 @@ JSIL.$GetMethodImplementation = function (method, target) {
   if (method._data.signature.genericArgumentValues) {
     if (isStatic) {
        return result.apply(method.DeclaringType.__PublicInterface__, method._data.signature.genericArgumentValues).bind(method.DeclaringType.__PublicInterface__);
+    } else if (result instanceof JSIL.InterfaceMethod) {
+      return function(methodArgs) { return result.Call(this, method._data.signature.genericArgumentValues, methodArgs) };
     }
     return result.apply(target, method._data.signature.genericArgumentValues);
+  } else if (result instanceof JSIL.InterfaceMethod) {
+    return function(methodArgs) { return result.Call(this, methodArgs); };
   }
   return result;
 };

@@ -2380,10 +2380,10 @@ namespace JSIL {
                 foreach (var attribute in member.CustomAttributes) {
                     if (ShouldSkipMember(attribute.AttributeType))
                         continue;
-                        
+
                     if (!isFirst || standalone)
                         output.NewLine();
-
+                        
                     output.Dot();
                     output.Identifier("Attribute");
                     output.LPar();

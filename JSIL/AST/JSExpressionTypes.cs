@@ -2089,15 +2089,22 @@ namespace JSIL.Ast {
         }
     }
 
-    public class JSTruncateExpression : JSExpression {
-        public JSTruncateExpression (JSExpression inner) 
-            : base (inner) {
+    // FIXME: Derive from JSCastExpression?
+    public abstract class JSSpecialNumericCastExpression : JSExpression {
+        protected JSSpecialNumericCastExpression (JSExpression inner)
+            : base(inner) {
         }
 
         public JSExpression Expression {
             get {
                 return Values[0];
             }
+        }
+    }
+
+    public class JSTruncateExpression : JSSpecialNumericCastExpression {
+        public JSTruncateExpression (JSExpression inner) 
+            : base (inner) {
         }
 
         public override bool HasGlobalStateDependency {
@@ -2124,6 +2131,74 @@ namespace JSIL.Ast {
 
         public override string ToString () {
             return String.Format("(int){0}", Expression);
+        }
+    }
+
+    public class JSIntegerToFloatExpression : JSSpecialNumericCastExpression {
+        public readonly TypeReference NewType;
+
+        public JSIntegerToFloatExpression (JSExpression inner, TypeReference newType)
+            : base(inner) {
+
+            NewType = newType;
+        }
+
+        public override bool HasGlobalStateDependency {
+            get {
+                return Expression.HasGlobalStateDependency;
+            }
+        }
+
+        public override bool IsConstant {
+            get {
+                return Expression.IsConstant;
+            }
+        }
+
+        public override bool IsNull {
+            get {
+                return Expression.IsNull;
+            }
+        }
+
+        public override TypeReference GetActualType (TypeSystem typeSystem) {
+            return NewType;
+        }
+
+        public override string ToString () {
+            return String.Format("({0}){1}", NewType.Name, Expression);
+        }
+    }
+
+    public class JSDoubleToFloatExpression : JSSpecialNumericCastExpression {
+        public JSDoubleToFloatExpression (JSExpression inner)
+            : base(inner) {
+        }
+
+        public override bool HasGlobalStateDependency {
+            get {
+                return Expression.HasGlobalStateDependency;
+            }
+        }
+
+        public override bool IsConstant {
+            get {
+                return Expression.IsConstant;
+            }
+        }
+
+        public override bool IsNull {
+            get {
+                return Expression.IsNull;
+            }
+        }
+
+        public override TypeReference GetActualType (TypeSystem typeSystem) {
+            return typeSystem.Single;
+        }
+
+        public override string ToString () {
+            return String.Format("(float){0}", Expression);
         }
     }
 
@@ -2392,14 +2467,14 @@ namespace JSIL.Ast {
             while (true) {
                 var cte = e as JSChangeTypeExpression;
                 var cast = e as JSCastExpression;
-                var truncation = e as JSTruncateExpression;
+                var specialNumericCast = e as JSSpecialNumericCastExpression;
 
                 if (cte != null)
                     e = cte.Expression;
                 else if (cast != null)
                     e = cast.Expression;
-                else if (truncation != null)
-                    e = truncation.Expression;
+                else if (specialNumericCast != null)
+                    e = specialNumericCast.Expression;
                 else
                     break;
             }
