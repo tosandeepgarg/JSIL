@@ -10,7 +10,7 @@ public static class Program
         var source2 = new TaskCompletionSource<object>();
 
         Console.WriteLine("Main thread");
-        AsyncMethod(source1.Task, source2.Task).ContinueWith((Task pre) => Console.WriteLine("Continuation:" + ((Task<string>)pre).Result));        
+        AsyncMethod(source1.Task, source2.Task).ContinueWith((Task pre) => Console.WriteLine("Continuation:" + ((Task<string>)pre).Result));
         Console.WriteLine("Main: Delay 1 complete");
         source1.TrySetResult(string.Empty);
         Console.WriteLine("Main: Delay 2 complete");
