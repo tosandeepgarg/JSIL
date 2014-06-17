@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+<div id="frameMaster"></div>
+<script src="tests.js"></script>
+<script>
+var testResults = [];
+var passed = 0;
+var failed = 0;
+var totalDuration = 0;
+
+function getParameterByName(name) {
+    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results == null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
+function runTest(test)
+{ 
+  document.getElementById("frameMaster").innerHTML = "";
+  document.getElementById("frameMaster").innerHTML = '<iframe style="width:800px; height: 600px;" id="jsilFrame" src="test_runner.html#'+test.url+'"></iframe>';
+}
+
+function testResult(result, duration)
+{
+var currentTest = tests[currentTestNum];
+if (currentTest.expectedResult != result){
+testResults.push(
+  {name: currentTest.id,
+   result: false, 
+   message: "--BEGIN RESULT--\n" + result +"\n--END RESULT--\n--BEGIN EXPECTED RESULT--\n" +currentTest.expectedResult + "\n--END EXPECTED RESULT--",
+   duration: duration
+   });
+   failed++;
+}
+else {
+  testResults.push(
+    {name: currentTest.id,
+     result: true, 
+     duration: duration
+    });
+   passed++;
+}
+totalDuration += duration;
+runNextTest();
+}
+var startTest = getParameterByName("start") * 1;
+var lastTest = startTest + (getParameterByName("count") * 1);
+var currentTestNum = startTest - 1;
+function runNextTest()
+{
+  currentTestNum++;
+  if (currentTestNum < tests.length && currentTestNum < lastTest)
+  {
+    runTest(tests[currentTestNum]);	
+  }
+  else
+  {
+    window.global_test_results = {
+	passed: passed,
+	failed: failed,
+	duration: totalDuration,
+	tests: testResults};
+  }
+}
+runNextTest();
+</script>
+</body>
+</html>

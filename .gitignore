@@ -4,6 +4,8 @@
 *.metaproj
 _ReSharper.*
 *.ReSharper
+packages/
+SauceLabsTests/obj/
 Compiler/obj
 Compiler/Profiles/*/obj
 Compiler/Profiles/*/bin
