@@ -1334,7 +1334,7 @@ JSIL.AttributeRecord.prototype.Construct = function () {
   else
     this.constructorArguments = constructorArguments = [];
 
-  var instance = JSIL.CreateInstanceOfType(resolvedType, constructorArguments);
+  var instance = JSIL.CreateInstanceOfType(resolvedType, "_ctor", constructorArguments);
   return instance;
 };
 
@@ -6949,12 +6949,24 @@ JSIL.MethodSignature.prototype.$MakeInlineCacheBody = function (callMethodName) 
     argumentNames.push(argumentName);
   }
 
+  var requiredArgumentCount = argumentNames.length;
+  var argumentCheckOperator = "!==";
+
+  // HACK to allow simple 'method.call(x)' form for zero-argument, non-generic methods.
+  if ((genericArgumentNames.length === 0) && (argumentTypes.length === 0)) {
+    requiredArgumentCount = 1;
+    argumentCheckOperator = "<";
+  }
+
   var functionName = (callMethodName === "CallInterface" ? "InterfaceMethod" : "MethodSignature") +
       "." + callMethodName +
       "$" + genericArgumentNames.length + 
       "$" + argumentTypes.length;   
 
   var body = [];
+  body.push("var argc = arguments.length | 0;");
+  body.push("if (argc " + argumentCheckOperator + " " + requiredArgumentCount + ") JSIL.RuntimeError('" + requiredArgumentCount + " argument(s) required, ' + argc + ' provided.');");
+
   if (callMethodName === "CallInterface") {
     body.push("var method = this.LookupMethod(" + methodLookupArg + ");");
     body.push("");
@@ -7848,22 +7860,27 @@ JSIL.GetTypesFromAssembly = function (assembly) {
   return result;
 };
 
-JSIL.$CreateInstanceOfTypeTable = {
-};
+JSIL.$CreateInstanceOfTypeTable = JSIL.CreateDictionaryObject(null);
 
 JSIL.CreateInstanceOfTypeRecordSet = function (type) {
-  this.records = {};
+  this.records = JSIL.CreateDictionaryObject(null);
 };
 
-JSIL.CreateInstanceOfTypeRecord = function (type, constructorName, constructor, publicInterface) {
+JSIL.CreateInstanceOfTypeRecord = function (
+  type, publicInterface, 
+  constructorName, constructor,
+  specialValue
+) {
   JSIL.RunStaticConstructors(publicInterface, type);
 
-  var closure = {};
+  var closure = JSIL.CreateDictionaryObject(null);
   var constructorBody = [];
 
   this.type = type;
   this.constructorName = constructorName;
   this.constructor = constructor;
+  this.specialValue = specialValue;
+  this.argumentlessInstanceConstructor = null;  
 
   // FIXME: I think this runs the field initializer twice? :(
   var fi = JSIL.GetFieldInitializer(type);
@@ -7874,10 +7891,18 @@ JSIL.CreateInstanceOfTypeRecord = function (type, constructorName, constructor, 
 
   if ((constructorName === null) && (constructor === null)) {
   } else {
-    if (type.__IsStruct__)
-      constructorBody.push("if ((argv === null) || (typeof (argv) === 'undefined') || (argv.length === 0)) return;");
-    else
+    if (type.__IsStruct__) {
+      this.argumentlessInstanceConstructor = JSIL.CreateNamedFunction(
+        type.__FullName__ + ".CreateInstanceOfType$NoArguments",
+        [],
+        constructorBody.join("\r\n"),
+        closure
+      );
+      this.argumentlessInstanceConstructor.prototype = publicInterface.prototype;
+
+    } else {
       constructorBody.push("if ((typeof (argv) === 'undefined') || (argv === null)) argv = [];");
+    }
 
     if (constructor) {
       closure.actualConstructor = constructor;
@@ -7895,61 +7920,97 @@ JSIL.CreateInstanceOfTypeRecord = function (type, constructorName, constructor, 
   this.instanceConstructor.prototype = publicInterface.prototype;
 };
 
-JSIL.CreateInstanceOfType = function (type, constructorName, constructorArguments) {
-  if (type.__IsNumeric__) {
-    // HACK: This System.Char nonsense is getting out of hand.
-    if (type.__FullName__ === "System.Char")
-      return "\0";
-    else
-      return 0;
-  }
-
-  if (type.__Type__ && !type.__PublicInterface__)
-    JSIL.RuntimeError("CreateInstanceOfType expects a type but a public interface was provided");
-
-  var recordSet = JSIL.$CreateInstanceOfTypeTable[type.__TypeId__];
+JSIL.CreateInstanceOfType$CacheMiss = function (type, constructorName, constructorArguments, recordSet) {
   if (!recordSet)
-    recordSet = JSIL.$CreateInstanceOfTypeTable[type.__TypeId__] = new JSIL.CreateInstanceOfTypeRecordSet(type);
+    recordSet = JSIL.$CreateInstanceOfTypeTable[type.__TypeId__] = 
+      new JSIL.CreateInstanceOfTypeRecordSet(type);
 
-  // FIXME: This gets used a lot, so make constructorName a required argument
-  //  if arguments are provided.
-  if (
-    JSIL.IsArray(constructorName) || 
-    (typeof (constructorName) === "undefined")
-  ) {
-    constructorArguments = constructorName;
-    constructorName = "_ctor";
-  }
+  var publicInterface = type.__PublicInterface__;
+  var record = null;
 
-  var record = recordSet.records[constructorName];
-  if (!record) {
-    var publicInterface = type.__PublicInterface__;
-    var constructor = null;
+  if (type.__IsNativeType__) {
+    var specialValue = JSIL.DefaultValue(type);
 
-    if (typeof (constructorName) === "string") {
-      constructor = publicInterface.prototype[constructorName];
+    record = new JSIL.CreateInstanceOfTypeRecord(
+      type, publicInterface, null, null, specialValue
+    );
+  } else if (typeof (constructorName) === "string") {
+    var constructor = publicInterface.prototype[constructorName];
 
-      if (!constructor)
-        JSIL.RuntimeError("Type '" + type.__FullName__ + "' does not have a constructor named '" + constructorName + "'");    
-    } else if (typeof (constructorName) === "function") {
-      constructor = constructorName;
-    }
+    if (!constructor)
+      JSIL.RuntimeError("Type '" + type.__FullName__ + "' does not have a constructor named '" + constructorName + "'");    
 
-    if (type.__IsClosed__ === false)
-      JSIL.RuntimeError("Cannot create an instance of an open type");
-    else if (type.IsInterface)
-      JSIL.RuntimeError("Cannot create an instance of an interface");
-
-    record = recordSet.records[constructorName] = new JSIL.CreateInstanceOfTypeRecord(
-      type, constructorName, constructor, publicInterface
+    record = new JSIL.CreateInstanceOfTypeRecord(
+      type, publicInterface, constructorName, constructor, null
+    );
+  } else if (typeof (constructorName) === "function") {
+    record = new JSIL.CreateInstanceOfTypeRecord(
+      type, publicInterface, constructorName, constructorName, null
+    );
+  } else {
+    record = new JSIL.CreateInstanceOfTypeRecord(
+      type, publicInterface, null, null, null
     );
   }
 
+  if (type.__IsClosed__ === false)
+    JSIL.RuntimeError("Cannot create an instance of an open type");
+  else if (type.IsInterface)
+    JSIL.RuntimeError("Cannot create an instance of an interface");
+
+  recordSet.records[constructorName] = record;
+
+  return JSIL.CreateInstanceOfType$CacheHit(type, record, constructorArguments);
+};
+
+JSIL.CreateInstanceOfType$CacheHit = function (type, record, constructorArguments) {
   if (type.__IsNativeType__) {
     // Native types need to be constructed differently.
-    return record.constructor.apply(record.constructor, constructorArguments);
+    if (record.specialValue !== null)
+      return record.specialValue;
+    else
+      return record.constructor.apply(record.constructor, constructorArguments);
+
   } else {
-    return new (record.instanceConstructor)(constructorArguments);
+
+    if (
+      (constructorArguments === null) ||
+      (constructorArguments === undefined) ||
+      (constructorArguments.length === 0)
+    ) {
+      if (record.argumentlessInstanceConstructor !== null)
+        return new (record.argumentlessInstanceConstructor)();
+      else
+        return new (record.instanceConstructor)($jsilcore.ArrayNull);
+
+    } else {
+      return new (record.instanceConstructor)(constructorArguments);
+    }
+  }
+};
+
+JSIL.CreateInstanceOfType = function (type, $constructorName, $constructorArguments) {
+  var constructorName = null, constructorArguments = null;
+  if (arguments.length < 2)
+    constructorName = "_ctor";
+  else
+    constructorName = $constructorName;
+
+  if (arguments.length < 3)
+    constructorArguments = null;
+  else
+    constructorArguments = $constructorArguments;
+
+  var recordSet = JSIL.$CreateInstanceOfTypeTable[type.__TypeId__] || null;
+  if (recordSet) {
+    var record = recordSet.records[constructorName] || null;
+    if (record) {
+      return JSIL.CreateInstanceOfType$CacheHit(type, record, constructorArguments);
+    } else {
+      return JSIL.CreateInstanceOfType$CacheMiss(type, constructorName, constructorArguments, recordSet);
+    }
+  } else {
+    return JSIL.CreateInstanceOfType$CacheMiss(type, constructorName, constructorArguments, null);
   }
 };
 
@@ -9274,9 +9335,15 @@ JSIL.$FilterMethodsByArgumentTypes = function (methods, argumentTypes, returnTyp
 JSIL.$GetMethodImplementation = function (method, target) {
   var isStatic = method._descriptor.Static;
   var isInterface = method._typeObject.IsInterface;
-  var key = isInterface
-    ? method._descriptor.EscapedName
-    : method._data.mangledName || method._descriptor.EscapedName;
+  var key = null;
+  if (isInterface)
+    key = method._descriptor.EscapedName;
+  else if (method._data.signature)
+    key = method._data.signature.GetKey(method._descriptor.EscapedName);
+  else
+    key = method._data.mangledName || method._descriptor.EscapedName;
+
+  var genericArgumentValues = method._data.signature.genericArgumentValues;
   var publicInterface = method._typeObject.__PublicInterface__;
   var context = isStatic || isInterface 
     ? publicInterface 
@@ -9288,15 +9355,55 @@ JSIL.$GetMethodImplementation = function (method, target) {
       if (!result.signature.IsClosed)
         JSIL.RuntimeError("Generic method is not closed");
   }
-  if (method._data.signature.genericArgumentValues) {
+
+  if (genericArgumentValues && genericArgumentValues.length) {
     if (isStatic) {
-       return result.apply(method.DeclaringType.__PublicInterface__, method._data.signature.genericArgumentValues).bind(method.DeclaringType.__PublicInterface__);
+      // Return an invoker that concats generic arguments and arglist and invokes
+      //  static generic method implementation directly.
+
+      return function (methodArgs) { 
+        var fullArgumentList = genericArgumentValues.concat(methodArgs);
+
+        return result.apply(
+          publicInterface, fullArgumentList
+        );
+      };
+
     } else if (result instanceof JSIL.InterfaceMethod) {
-      return function(methodArgs) { return result.Call(this, method._data.signature.genericArgumentValues, methodArgs) };
+      // Return an invoker that specifies the generic arguments and passes in rest
+
+      return function (methodArgs) { 
+        return result.Call(
+          this, 
+          genericArgumentValues, 
+          methodArgs
+        );
+      };
+
+    } else {
+      // Return an invoker that concats generic arguments and arglist and invokes
+      //  generic method implementation directly.
+
+      return function (methodArgs) { 
+        var fullArgumentList = genericArgumentValues.concat(methodArgs);
+
+        return result.apply(
+          this, fullArgumentList
+        );
+      };
     }
-    return result.apply(target, method._data.signature.genericArgumentValues);
+
   } else if (result instanceof JSIL.InterfaceMethod) {
-    return function(methodArgs) { return result.Call(this, methodArgs); };
+    // Wrap the interface method invoker since it expects a generic arguments parameter.
+
+    return function (methodArgs) { 
+      return result.Call(this, null, methodArgs); 
+    };
+
+  }
+
+  if (!result) {
+    debugger;
   }
   return result;
 };
