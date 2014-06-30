@@ -567,6 +567,14 @@ namespace JSIL {
 
         private void WriteTruncationForType (TypeReference type) {
             switch (type.FullName) {
+                case "System.Byte":
+                    Output.WriteRaw(" & 0xFF");
+                    break;
+
+                case "System.UInt16":
+                    Output.WriteRaw(" & 0xFFFF");
+                    break;
+
                 case "System.UInt32":
                     Output.WriteRaw(" >>> 0");
                     break;
@@ -1651,6 +1659,40 @@ namespace JSIL {
             }
         }
 
+        public void VisitNode (JSUInt32MultiplyExpression ume) {
+            Output.LPar();
+            Output.WriteRaw("Math.imul");
+            Output.LPar();
+
+            Visit(ume.Left);
+            Output.Comma();
+            Visit(ume.Right);
+
+            Output.RPar();
+
+            Output.WriteRaw(" >>> 0");
+            Output.RPar();
+
+            // FIXME: Spit out a >>> 0 here? Probably not needed?
+        }
+
+        public void VisitNode (JSInt32MultiplyExpression ume) {
+            Output.LPar();
+            Output.WriteRaw("Math.imul");
+            Output.LPar();
+
+            Visit(ume.Left);
+            Output.Comma();
+            Visit(ume.Right);
+
+            Output.RPar();
+
+            Output.WriteRaw(" | 0");
+            Output.RPar();
+
+            // FIXME: Spit out a >>> 0 here? Probably not needed?
+        }
+
         public void VisitNode (JSTernaryOperatorExpression ternary) {
             Output.LPar();
 
@@ -1870,7 +1912,7 @@ namespace JSIL {
                 var gaCount = method.GenericParameterNames.Length;
                 int argCount = method.Parameters.Length;
 
-                foreach (var signature in mss.Signatures) {
+                foreach (var signature in mss) {
                     if (
                         (signature.ParameterCount == argCount)
                     )
@@ -1884,11 +1926,15 @@ namespace JSIL {
                             overloadCount += 1;
                         }
                     }
+
+                    // If there's only one overload with this argument count, we don't need to use
+                    //  the expensive overloaded method dispatch path.
+
+                    if (overloadCount >= 2)
+                        return false;
                 }
 
-                // If there's only one overload with this argument count, we don't need to use
-                //  the expensive overloaded method dispatch path.
-                return overloadCount < 2;
+                return true;
             }
 
             return false;

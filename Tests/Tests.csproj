@@ -12,10 +12,27 @@
     <AssemblyName>Tests</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <OutputPath>..\bin\</OutputPath>
+    <PlatformTarget>x86</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugSymbols>true</DebugSymbols>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisIgnoreBuiltInRuleSets>true</CodeAnalysisIgnoreBuiltInRuleSets>
+    <CodeAnalysisIgnoreBuiltInRules>true</CodeAnalysisIgnoreBuiltInRules>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisIgnoreBuiltInRuleSets>true</CodeAnalysisIgnoreBuiltInRuleSets>
+    <CodeAnalysisIgnoreBuiltInRules>true</CodeAnalysisIgnoreBuiltInRules>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
     <DebugSymbols>true</DebugSymbols>
-    <OutputPath>..\bin\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <DebugType>full</DebugType>
     <PlatformTarget>x86</PlatformTarget>
@@ -24,7 +41,6 @@
     <CodeAnalysisIgnoreBuiltInRules>true</CodeAnalysisIgnoreBuiltInRules>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
-    <OutputPath>..\bin\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <Optimize>true</Optimize>
     <DebugType>pdbonly</DebugType>
@@ -32,6 +48,7 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisIgnoreBuiltInRuleSets>true</CodeAnalysisIgnoreBuiltInRuleSets>
     <CodeAnalysisIgnoreBuiltInRules>true</CodeAnalysisIgnoreBuiltInRules>
+    <CodeAnalysisFailOnMissingRules>true</CodeAnalysisFailOnMissingRules>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="nunit.framework">
@@ -297,6 +314,8 @@
     <None Include="SimpleTestCases\Issue530.cs" />
     <None Include="SimpleTestCases\Issue508.cs" />
     <None Include="SimpleTestCases\Issue381.cs" />
+    <None Include="SimpleTestCases\UInt32Multiply.cs" />
+    <None Include="FailingTestCases\SmallSignedIntOverflowAndUnderflow.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />
@@ -340,6 +359,9 @@
     <None Include="SpecialTestCases\OverloadedGenericMethodSignatures.cs" />
     <None Include="SimpleTestCases\GenericFieldInitializer.cs" />
     <None Include="SimpleTestCases\EnumCompare.cs" />
+    <None Include="Tests.dll.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Include="XMLTestCases\WriteEmptyElement.cs" />
     <None Include="XMLTestCases\Common.cs" />
     <None Include="SimpleTestCases\GenericInheritedField.cs" />
@@ -485,8 +507,8 @@
     <None Include="SimpleTestCases\EventHandlerSample.cs" />
     <None Include="InterfaceTestCases\InterfaceEqualityComparison.cs" />
     <None Include="SimpleTestCases\Int32OverflowAndUnderflow.cs" />
-    <None Include="FailingTestCases\SmallIntOverflowAndUnderflow.cs" />
-    <None Include="FailingTestCases\Int32Multiply.cs" />
+    <None Include="SimpleTestCases\SmallUnsignedIntOverflowAndUnderflow.cs" />
+    <None Include="SimpleTestCases\Int32Multiply.cs" />
     <None Include="SimpleTestCases\CompoundAssignmentWithCustomOperator.cs" />
     <None Include="SpecialTestCases\InheritedExternalStubError.cs" />
     <None Include="InterfaceTestCases\CastArrayToIList.cs" />
@@ -908,12 +930,5 @@
     <Content Include="BinaryTestCases\InheritedAndExplicitOverwrittenMethods.dll" />
     <Content Include="BinaryTestCases\InheritedInterfacesExplicit.dll" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+  <Import Project="..\.NET 4.5.targets" />
 </Project>

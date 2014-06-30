@@ -17,8 +17,10 @@ using JSIL.Transforms;
 using JSIL.Translator;
 using Mono.Cecil;
 using ICSharpCode.Decompiler;
+
 using GenericParameterAttributes = Mono.Cecil.GenericParameterAttributes;
 using MethodInfo = JSIL.Internal.MethodInfo;
+using TypeInfo = JSIL.Internal.TypeInfo;
 
 namespace JSIL {
     public delegate void AssemblyLoadedHandler (string assemblyName, string classification);
@@ -418,12 +420,34 @@ namespace JSIL {
         public TranslationResult Translate (
             string assemblyPath, bool scanForProxies = true
         ) {
-            var sw = Stopwatch.StartNew();
+            var originalLatencyMode = System.Runtime.GCSettings.LatencyMode;
 
-            if (Configuration.RunBugChecks.GetValueOrDefault(true))
-                BugChecks.RunBugChecks();
-            else
-                Console.Error.WriteLine("// WARNING: Bug checks have been suppressed. You may be running JSIL on a broken/unsupported .NET runtime.");
+            try {
+#if TARGETTING_FX_4_5
+                if (Configuration.TuneGarbageCollection.GetValueOrDefault(true))
+                    System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+#endif
+
+                var sw = Stopwatch.StartNew();
+
+                if (Configuration.RunBugChecks.GetValueOrDefault(true))
+                    BugChecks.RunBugChecks();
+                else
+                    Console.Error.WriteLine("// WARNING: Bug checks have been suppressed. You may be running JSIL on a broken/unsupported .NET runtime.");
+
+                var result = TranslateInternal(assemblyPath, scanForProxies);
+
+                sw.Stop();
+                result.Elapsed = sw.Elapsed;
+                return result;
+            } finally {
+                System.Runtime.GCSettings.LatencyMode = originalLatencyMode;
+            }
+        }
+
+        private TranslationResult TranslateInternal (
+            string assemblyPath, bool scanForProxies = true
+        ) {
 
             var result = new TranslationResult(this.Configuration, assemblyPath, Manifest);
             var assemblies = LoadAssembly(assemblyPath);
@@ -450,9 +474,11 @@ namespace JSIL {
             }
 
             AnalyzeFunctions(
-                parallelOptions, assemblies, 
+                parallelOptions, assemblies,
                 methodsToAnalyze, pr
             );
+
+            TriggerAutomaticGC();
 
             pr.OnFinished();
 
@@ -462,6 +488,8 @@ namespace JSIL {
 
             RunTransformsOnAllFunctions(parallelOptions, pr, result.Log);
             pr.OnFinished();
+
+            TriggerAutomaticGC();
 
             pr = new ProgressReporter();
             if (Writing != null)
@@ -522,11 +550,20 @@ namespace JSIL {
                     writeAssembly(i);
             }
 
+            TriggerAutomaticGC();
+
             pr.OnFinished();
 
-            sw.Stop();
-            result.Elapsed = sw.Elapsed;
             return result;
+        }
+
+        private void TriggerAutomaticGC () {
+            if (Configuration.TuneGarbageCollection.GetValueOrDefault(true))
+#if TARGETTING_FX_4_5
+                GC.Collect(2, GCCollectionMode.Optimized, false);
+#else
+                GC.Collect(2, GCCollectionMode.Optimized);
+#endif
         }
 
         public static void GenerateManifest (AssemblyManifest manifest, string assemblyPath, TranslationResult result) {
@@ -632,6 +669,8 @@ namespace JSIL {
         protected void RunTransformsOnAllFunctions (ParallelOptions parallelOptions, ProgressReporter pr, StringBuilder log) {
             int i = 0;
 
+            const int autoGcInterval = 256;
+
             Action<QualifiedMemberIdentifier> itemHandler = (id) => {
                 var e = FunctionCache.GetCacheEntry(id);
 
@@ -641,12 +680,18 @@ namespace JSIL {
 
                 var _i = Interlocked.Increment(ref i);
 
+                if ((_i % autoGcInterval) == 0)
+                    TriggerAutomaticGC();
+
                 if (e.Expression == null)
                     return;
 
                 pr.OnProgressChanged(_i, _i + FunctionCache.PendingTransformsQueue.Count);
 
-                RunTransformsOnFunction(id, e.Expression, e.SpecialIdentifiers, log);
+                if (RunTransformsOnFunction(id, e.Expression, e.SpecialIdentifiers, log)) {
+                    // Release our SpecialIdentifiers instance so it doesn't leak indefinitely.
+                    // e.SpecialIdentifiers = null;
+                }
             };
 
             while (FunctionCache.PendingTransformsQueue.Count > 0) {
@@ -684,11 +729,11 @@ namespace JSIL {
             }
 
             while (allTypes.Count > 0) {
-                var types = new HashSet<TypeDefinition>(allTypes).ToArray();
+                var types = new HashSet<TypeDefinition>(allTypes).ToList();
                 allTypes.Clear();
 
                 Parallel.For(
-                    0, types.Length, parallelOptions,
+                    0, types.Count, parallelOptions,
                     () => new List<TypeDefinition>(),
                     (i, loopState, typeList) => {
                         var type = types[i];
@@ -1302,11 +1347,11 @@ namespace JSIL {
                         output.NewLine();
                     }
 
-                    var constructors = typedef.Methods.Where((m) => m.IsConstructor).ToArray();
-                    if ((constructors.Length != 0) || typedef.IsValueType) {
+                    var constructors = typedef.Methods.Where((m) => m.IsConstructor).ToList();
+                    if ((constructors.Count != 0) || typedef.IsValueType) {
                         output.WriteRaw("MaximumConstructorArguments: ");
 
-                        if (typedef.IsValueType && (constructors.Length == 0))
+                        if (typedef.IsValueType && (constructors.Count == 0))
                             output.Value(0);
                         else
                             output.Value(constructors.Max((m) => m.Parameters.Count));
@@ -1460,7 +1505,7 @@ namespace JSIL {
                 output.Semicolon(true);
             }
 
-            var methodsToTranslate = typedef.Methods.OrderBy((md) => md.Name).ToArray();
+            var methodsToTranslate = typedef.Methods.OrderBy((md) => md.Name).ToList();
 
             var cacheTypes = Configuration.CodeGenerator.CacheTypeExpressions.GetValueOrDefault(true);
             var cacheSignatures = Configuration.CodeGenerator.CacheMethodSignatures.GetValueOrDefault(true);
@@ -1635,7 +1680,7 @@ namespace JSIL {
             }
 
             var interfaces = typeInfo.AllInterfacesRecursive;
-            if (!makingSkeletons && (interfaces.Length > 0)) {
+            if (!makingSkeletons && (interfaces.Count > 0)) {
                 output.NewLine();
 
                 dollar.WriteTo(output);
@@ -1645,15 +1690,16 @@ namespace JSIL {
 
                 bool firstInterface = true;
 
-                for (var i = 0; i < interfaces.Length; i++) {
-                    if (interfaces[i].ImplementingType != typeInfo)
+                for (var i = 0; i < interfaces.Count; i++) {
+                    var elt = interfaces.Array[interfaces.Offset + i];
+                    if (elt.ImplementingType != typeInfo)
                         continue;
-                    if (interfaces[i].ImplementedInterface.Info.IsIgnored)
+                    if (elt.ImplementedInterface.Info.IsIgnored)
                         continue;
-                    if (ShouldSkipMember(interfaces[i].ImplementedInterface.Reference))
+                    if (ShouldSkipMember(elt.ImplementedInterface.Reference))
                         continue;
 
-                    var @interface = interfaces[i].ImplementedInterface.Reference;
+                    var @interface = elt.ImplementedInterface.Reference;
 
                     if (firstInterface)
                         firstInterface = false;
@@ -1892,7 +1938,7 @@ namespace JSIL {
             return allVariables;
         }
 
-        private void RunTransformsOnFunction (
+        private bool RunTransformsOnFunction (
             QualifiedMemberIdentifier memberIdentifier, JSFunctionExpression function,
             SpecialIdentifiers si, StringBuilder log
         ) {
@@ -1917,6 +1963,8 @@ namespace JSIL {
                         );
                 }
             }
+
+            return completed;
         }
 
         protected static bool NeedsStaticConstructor (TypeReference type) {
@@ -2226,7 +2274,7 @@ namespace JSIL {
 
                 // Strip initializations of ignored and external fields from the cctor, since
                 //  they are generated by the compiler
-                var statements = f.Body.Children.OfType<JSExpressionStatement>().ToArray();
+                var statements = f.Body.Children.OfType<JSExpressionStatement>().ToList();
                 foreach (var es in statements) {
                     var boe = es.Expression as JSBinaryOperatorExpression;
                     if (boe == null)
@@ -2311,7 +2359,7 @@ namespace JSIL {
 
                 lock (typeInfo.Members)
                     typeInfo.Members[identifier] = new Internal.MethodInfo(
-                        typeInfo, identifier, fakeCctor, new ProxyInfo[0], null
+                        typeInfo, identifier, fakeCctor, new ArraySegment<ProxyInfo>(), null
                     );
 
                 output.NewLine();
@@ -2896,6 +2944,21 @@ namespace JSIL {
         public TypeInfoProvider GetTypeInfoProvider () {
             OwnsTypeInfoProvider = false;
             return _TypeInfoProvider;
+        }
+
+        private SpecialIdentifiers _CachedSpecialIdentifiers;
+        private object _CachedSpecialIdentifiersLock = new object();
+
+        public SpecialIdentifiers GetSpecialIdentifiers (TypeSystem typeSystem) {
+            lock (_CachedSpecialIdentifiersLock) {
+                if (
+                    (_CachedSpecialIdentifiers == null) ||
+                    (_CachedSpecialIdentifiers.TypeSystem != typeSystem)
+                )
+                    _CachedSpecialIdentifiers = new JSIL.SpecialIdentifiers(FunctionCache.MethodTypes, typeSystem, _TypeInfoProvider);
+            }
+
+            return _CachedSpecialIdentifiers;
         }
     }
 }
