@@ -888,7 +888,6 @@
     <None Include="SimpleTestCases\Issue364_1.cs" />
     <None Include="SimpleTestCases\Issue364_2.cs" />
     <None Include="SimpleTestCases\Issue364_3.cs" />
-    <None Include="SimpleTestCases\NullableModification_Issue361.cs" />
     <None Include="SimpleTestCases\Issue368.cs" />
     <None Include="SimpleTestCases\ReflectionInterfaceMethodInvoke.cs" />
     <None Include="SpecialTestCases\PreventFastMethodDispatcherIfHideBase_Issue368.cs" />
