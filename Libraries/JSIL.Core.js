@@ -8616,12 +8616,6 @@ JSIL.CloneParameter = function (parameterType, value) {
   return value;
 };
 
-JSIL.MemberwiseClone = function (value) {
-  if (value !== null)
-    return value.MemberwiseClone();
-  return value;
-};
-
 JSIL.ValueOfNullable = function (value) {
   if (value === null)
     return value;

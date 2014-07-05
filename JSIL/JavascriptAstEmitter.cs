@@ -618,9 +618,10 @@ namespace JSIL {
         }
 
         public void VisitNode (JSStructCopyExpression sce) {
-            Output.WriteRaw("JSIL.MemberwiseClone");
-            Output.LPar();
             Visit(sce.Struct);
+            Output.Dot();
+            Output.Identifier("MemberwiseClone");
+            Output.LPar();
             Output.RPar();
         }
 
