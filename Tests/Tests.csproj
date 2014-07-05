@@ -875,7 +875,6 @@
     <None Include="SpecialTestCases\ClassMarkedWithMetaAttibutes.cs" />
     <None Include="SimpleTestCases\InterfaceGenericCall_Issue348.cs" />
     <None Include="SimpleTestCases\NullableField_Issue316.cs" />
-    <None Include="SimpleTestCases\NullableCloneParameter_Issue316.cs" />
     <None Include="SimpleTestCases\InnerClassNameInLibrary_Issue352.cs" />
     <None Include="SimpleTestCases\AsyncAwait.cs" />
     <None Include="SpecialTestCases\InnerClassNameFormatting_Issue352.cs" />
