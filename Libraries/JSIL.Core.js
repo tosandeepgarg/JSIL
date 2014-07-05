@@ -3233,13 +3233,8 @@ JSIL.MakeFieldInitializer = function (typeObject, returnNamedFunction) {
     var key = "f" + i.toString();
 
     if (field.isStruct) {
-      if (field.type.__FullName__.indexOf("System.Nullable`1") != 0)
-      {
-        body.push(JSIL.FormatMemberAccess(targetArgName, field.name) + " = new types." + key + "();");
-        types[key] = field.type.__PublicInterface__;
-      } else {
-        body.push(JSIL.FormatMemberAccess(targetArgName, field.name) + " = null;");
-      }
+      body.push(JSIL.FormatMemberAccess(targetArgName, field.name) + " = new types." + key + "();");
+      types[key] = field.type.__PublicInterface__;
     } else if (field.type.__IsNativeType__ && field.type.__IsNumeric__) {
       // This is necessary because JS engines are incredibly dumb about figuring out the actual type(s)
       //  an object's field slots should be.
