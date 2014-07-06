@@ -197,13 +197,28 @@ namespace JSIL {
             );
         }
 
-        public JSInvocationExpression ValueOfNullable (JSExpression nullableExpression) {
+        public JSExpression NullableHasValue (JSExpression nullableExpression) {
+            return new JSBinaryOperatorExpression(
+                JSOperator.NotEqual, 
+                nullableExpression, new JSNullLiteral(TypeSystem.Object), 
+                TypeSystem.Boolean
+            );
+        }
+
+        public JSExpression ValueOfNullable (JSExpression nullableExpression) {
+            if (nullableExpression is JSValueOfNullableExpression)
+                return nullableExpression;
+
+            return new JSValueOfNullableExpression(nullableExpression);
+        }
+
+        public JSExpression ValueOfNullableOrDefault (JSExpression nullableExpression, JSExpression defaultValue) {
             var valueType = nullableExpression.GetActualType(TypeSystem);
             valueType = TypeUtil.StripNullable(valueType);
 
             return JSInvocationExpression.InvokeStatic(
-                Dot("ValueOfNullable", valueType),
-                new[] { nullableExpression }, true
+                Dot("Nullable_ValueOrDefault", valueType),
+                new[] { nullableExpression, defaultValue }, true
             );
         }
 
