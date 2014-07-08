@@ -273,7 +273,7 @@ namespace JSIL.Ast {
                     referent = PackedArrayUtil.GetItem(targetType, targetTypeInfo, aer.Array, aer.Index, jsil.MethodTypes, proxy: true);
                     return true;
                 } else {
-                    referent = new JSIndexerExpression(aer.Array, aer.Index, aer.ReferenceType.GetElementType());
+                    referent = new JSIndexerExpression(aer.Array, aer.Index, TypeUtil.GetElementType(aer.ReferenceType, true));
                     return true;
                 }
             }
@@ -359,9 +359,7 @@ namespace JSIL.Ast {
             }
 
             if (mref != null) {
-                var referent = mref.Referent;
-                while (referent is JSReferenceExpression)
-                    referent = ((JSReferenceExpression)referent).Referent;
+                var referent = Strip(mref.Referent);
 
                 var dot = referent as JSDotExpressionBase;
 
@@ -432,6 +430,19 @@ namespace JSIL.Ast {
             } else {
                 return new JSReferenceExpression(referent);
             }
+        }
+
+        public static JSExpression Strip (JSExpression expression) {
+            do {
+                var re = expression as JSReferenceExpression;
+
+                if (re != null)
+                    expression = re.Referent;
+                else
+                    break;
+            } while (true);
+
+            return expression;
         }
 
         public JSExpression Referent {
@@ -988,6 +999,14 @@ namespace JSIL.Ast {
         public JSIndexerExpression (JSExpression target, JSExpression index, TypeReference elementType = null)
             : base(target, index) {
 
+            if (
+                (elementType != null) &&
+                elementType.HasGenericParameters &&
+                !(elementType is GenericInstanceType)
+            ) {
+                Debugger.Break();
+            }
+
             ElementType = elementType;
         }
 
@@ -997,11 +1016,7 @@ namespace JSIL.Ast {
 
             var targetType = DeReferenceType(Target.GetActualType(typeSystem));
 
-            var at = targetType as ArrayType;
-            if (at != null)
-                return at.ElementType;
-            else
-                return base.GetActualType(typeSystem);
+            return TypeUtil.GetElementType(targetType, true);
         }
 
         public JSExpression Target {
@@ -1538,7 +1553,7 @@ namespace JSIL.Ast {
         }
 
         public static JSExpression UnpackArrayInitializer (TypeReference arrayType, byte[] data) {
-            var elementType = TypeUtil.DereferenceType(arrayType).GetElementType();
+            var elementType = TypeUtil.GetElementType(TypeUtil.DereferenceType(arrayType), true);
             JSExpression[] values;
 
             using (var ms = new MemoryStream(data, false))
@@ -2001,6 +2016,10 @@ namespace JSIL.Ast {
             if (TypeUtil.TypesAreEqual(currentDerefed, newDerefed, false) && !force)
                 return inner;
 
+            // HACK: Propagate null expressions without meddling.
+            if (inner.IsNull)
+                return inner;
+
             if (
                 (rankCurrent == rankNew) && 
                 (rankCurrent > 0)
@@ -2046,8 +2065,7 @@ namespace JSIL.Ast {
                     var originalInner = inner;
                     var originalInnerType = originalInner.GetActualType(typeSystem);
 
-                    while (inner is JSReferenceExpression)
-                        inner = ((JSReferenceExpression)inner).Referent;
+                    inner = JSReferenceExpression.Strip(inner);
 
                     var innerType = inner.GetActualType(typeSystem);
                     var indexer = inner as JSIndexerExpression;
@@ -2059,7 +2077,7 @@ namespace JSIL.Ast {
                     } else if ((originalInnerType is ByReferenceType) &&
                         TypeUtil.IsNumeric(innerType) &&
                         (newType is PointerType) &&
-                        TypeUtil.IsNumeric(newType.GetElementType())
+                        TypeUtil.IsNumeric(TypeUtil.GetElementType(newType, true))
                     ) {
                         // Handle cast of primitive& to primitive* (reinterpret single value as an array of some other fundamental type)
                         return new JSPinValueExpression(inner, newType);
@@ -2284,7 +2302,11 @@ namespace JSIL.Ast {
         }
 
         public override TypeReference GetActualType (TypeSystem typeSystem) {
-            return Expression.GetActualType(typeSystem);
+            int temp;
+            var innerType = TypeUtil.FullyDereferenceType(Expression.GetActualType(typeSystem), out temp);
+
+            var innerTypeGit = (GenericInstanceType)innerType;
+            return innerTypeGit.GenericArguments[0];
         }
 
         public override string ToString () {
@@ -2653,7 +2675,7 @@ namespace JSIL.Ast {
 
         public override TypeReference GetActualType (TypeSystem typeSystem) {
             var pointerType = Pointer.GetActualType(typeSystem);
-            return pointerType.GetElementType();
+            return TypeUtil.GetElementType(pointerType, true);
         }
 
         public override string ToString () {

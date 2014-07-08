@@ -111,6 +111,8 @@
     <None Include="AnalysisTestCases\CopyForTemporaryStructInLoop.cs" />
     <None Include="AnalysisTestCases\StructAllocationHoistingTwiceInStatement.cs" />
     <None Include="AnalysisTestCases\Issue371.cs" />
+    <None Include="AnalysisTestCases\Issue494.cs" />
+    <None Include="AnalysisTestCases\Issue494_2.cs" />
     <Compile Include="ComparisonTest.cs" />
     <Compile Include="ComparisonTests.cs" />
     <None Include="FailingTestCases\BaseFields.cs" />
@@ -219,6 +221,7 @@
     <None Include="PerformanceTestCases\EnumCasts.cs" />
     <None Include="SpecialTestCases\DoubleFloatCasts.cs" />
     <None Include="PerformanceTestCases\BaseMethodCalls.cs" />
+    <None Include="TestCases\EnumClone.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />

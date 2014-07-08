@@ -727,15 +727,24 @@ namespace JSIL {
                 );
             }
 
-            var thisType = TypeUtil.GetTypeDefinition(thisExpression.GetActualType(TypeSystem));
-            Func<bool, JSExpression> generate = (tq) => {
-                var actualThis = @static ? new JSType(method.Method.DeclaringType.Definition) : thisExpression;
+            var thisType = thisExpression.GetActualType(TypeSystem);
+            var propertyReplacement = DoPropertyReplacement(thisExpression, thisType, method, arguments, @virtual, @static);
+            if (propertyReplacement != null)
+                return propertyReplacement;
 
-                if ((method.Reference.DeclaringType is GenericInstanceType) && !method.Reference.HasThis) {
+            Func<bool, JSExpression> generate = (tq) => {
+                var actualThis = @static 
+                    ? new JSType(method.Method.DeclaringType.Definition) 
+                    : thisExpression;
+
+                if (
+                    (method.Reference.DeclaringType is GenericInstanceType) && 
+                    !method.Reference.HasThis
+                )
                     actualThis = new JSType(method.Reference.DeclaringType);
-                }
 
                 if ((propertyInfo.Member.GetMethod != null) && (method.Method.Member.Name == propertyInfo.Member.GetMethod.Name)) {
+
                     return new JSPropertyAccess(
                         actualThis, new JSProperty(method.Reference, propertyInfo), 
                         false, tq, 
@@ -743,6 +752,7 @@ namespace JSIL {
                         @virtual
                     );
                 } else {
+
                     if (arguments.Length == 0) {
                         throw new InvalidOperationException(String.Format(
                             "The property setter '{0}' was invoked without arguments",
@@ -766,11 +776,41 @@ namespace JSIL {
             // Accesses to a base property should go through a regular method invocation, since
             //  javascript properties do not have a mechanism for base access
             if (method.Method.Member.HasThis) {
-                if (!TypeUtil.TypesAreEqual(method.Method.DeclaringType.Definition, thisType) && !@virtual)
+
+                if (
+                    !TypeUtil.TypesAreEqual(
+                        method.Method.DeclaringType.Definition, 
+                        TypeUtil.GetTypeDefinition(thisType)
+                    ) && !@virtual
+                )
                     return generate(true);
             }
 
             return generate(false);
+        }
+
+        private JSExpression DoPropertyReplacement (
+            JSExpression thisExpression, TypeReference thisType, 
+            JSMethod method, JSExpression[] arguments, 
+            bool @virtual, bool @static
+        ) {
+            TypeReference methodType = method.Reference.DeclaringType;
+
+            if (
+                TypeUtil.IsNullable(thisType) || 
+                // HACK: When translating methods of Nullable, thisType is not a generic instance.
+                TypeUtil.IsNullable(methodType)
+            ) {
+                switch (method.Method.Name) {
+                    case "get_HasValue":
+                        return JSIL.NullableHasValue(thisExpression);
+
+                    case "get_Value":
+                        return JSIL.ValueOfNullable(thisExpression);
+                }
+            }
+
+            return null;
         }
 
         protected bool ContainsLabels (ILNode root) {
@@ -873,8 +913,7 @@ namespace JSIL {
             }
 
             var translated = TranslateNode(toTranslate);
-            while (translated is JSReferenceExpression)
-                translated = ((JSReferenceExpression)translated).Referent;
+            translated = JSReferenceExpression.Strip(translated);
 
             var boe = translated as JSBinaryOperatorExpression;
 
@@ -1522,10 +1561,7 @@ namespace JSIL {
 
                     if ((trueNull != null) && (newBoe != null)) {
                         var operandLhs = newBoe.Left;
-                        if (operandLhs is JSResultReferenceExpression)
-                            operandLhs = ((JSResultReferenceExpression)operandLhs).Referent;
-                        else if (operandLhs is JSReferenceExpression)
-                            operandLhs = ((JSReferenceExpression)operandLhs).Referent;
+                        operandLhs = JSReferenceExpression.Strip(operandLhs);
 
                         result = new JSBinaryOperatorExpression(
                             JSOperator.Assignment, operandLhs,
@@ -1731,7 +1767,7 @@ namespace JSIL {
         }
 
         protected JSExpression Translate_Mul (ILExpression node) {
-            if (TypeUtil.IsIntegral(node.ExpectedType)) {
+            if (TypeUtil.IsIntegral(node.ExpectedType ?? node.InferredType)) {
                 var left = TranslateNode(node.Arguments[0]);
                 var right = TranslateNode(node.Arguments[1]);
                 var leftType = left.GetActualType(TypeSystem);
@@ -2117,7 +2153,7 @@ namespace JSIL {
 
             var referenceType = reference.GetActualType(TypeSystem);
             if (referenceType.IsPointer) {
-                return new JSReadThroughPointerExpression(reference, referenceType.GetElementType());
+                return new JSReadThroughPointerExpression(reference, TypeUtil.GetElementType(referenceType, true));
             } else {
                 if (!JSReferenceExpression.TryDereference(JSIL, reference, out referent))
                     WarningFormatFunction("unsupported reference type for ldobj: {0}", node.Arguments[0]);
@@ -2796,7 +2832,7 @@ namespace JSIL {
                 return Translate_Newobj_Delegate(node, constructor, arguments.ToArray());
             } else if (constructor.DeclaringType.IsArray) {
                 return JSIL.NewMultidimensionalArray(
-                    constructor.DeclaringType.GetElementType(), arguments.ToArray()
+                    TypeUtil.GetElementType(constructor.DeclaringType, true), arguments.ToArray()
                 );
             } else if (TypeUtil.IsNullable(constructor.DeclaringType)) {
                 if (arguments.Count == 0)
@@ -2828,11 +2864,12 @@ namespace JSIL {
         }
 
         protected JSExpression Translate_InitArray (ILExpression node, TypeReference _arrayType) {
-            var at = _arrayType as ArrayType;
+            int temp;
+            var at = (ArrayType)TypeUtil.FullyDereferenceType(_arrayType, out temp);
             var initializer = new JSArrayExpression(at, Translate(node.Arguments).ToArray());
+
             int rank = 0;
-            if (at != null)
-                rank = at.Rank;
+            rank = at.Rank;
 
             if (TypeUtil.TypesAreEqual(TypeSystem.Object, at) && rank < 2)
                 return initializer;
@@ -2860,9 +2897,7 @@ namespace JSIL {
 
             for (var i = 1; i < node.Arguments.Count; i++) {
                 var translated = TranslateNode(node.Arguments[i]);
-
-                while (translated is JSReferenceExpression)
-                    translated = ((JSReferenceExpression)translated).Referent;
+                translated = JSReferenceExpression.Strip(translated);
 
                 var invocation = (JSInvocationExpression)translated;
 
@@ -2892,9 +2927,7 @@ namespace JSIL {
 
             for (var i = 1; i < node.Arguments.Count; i++) {
                 var translated = TranslateNode(node.Arguments[i]);
-
-                while (translated is JSReferenceExpression)
-                    translated = ((JSReferenceExpression)translated).Referent;
+                translated = JSReferenceExpression.Strip(translated);
 
                 var boe = translated as JSBinaryOperatorExpression;
                 var ie = translated as JSInvocationExpression;
@@ -2902,9 +2935,7 @@ namespace JSIL {
 
                 if (boe != null) {
                     var left = boe.Left;
-
-                    while (left is JSReferenceExpression)
-                        left = ((JSReferenceExpression)left).Referent;
+                    left = JSReferenceExpression.Strip(left);
 
                     var leftDot = left as JSDotExpressionBase;
 

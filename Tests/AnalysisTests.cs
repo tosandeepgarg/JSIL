@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -8,6 +9,16 @@ using NUnit.Framework;
 namespace JSIL.Tests {
     [TestFixture]
     public class AnalysisTests : GenericTestFixture {
+        protected override Translator.Configuration MakeConfiguration () {
+            var result = base.MakeConfiguration();
+            
+            // HACK: Ease static analysis debugging
+            if (Debugger.IsAttached)
+                result.UseThreads = false;
+
+            return result;
+        }
+
         [Test]
         public void FieldAssignmentDetection () {
             var output = "ct=1, mc=(a=0 b=0)\r\nct=1, mc=(a=2 b=1)\r\nct=3, mc=(a=2 b=1)";
@@ -165,6 +176,9 @@ namespace JSIL.Tests {
             Assert.IsTrue(generatedJs.Contains(
                 @".IncrementArgumentValue(a.MemberwiseClone())"
             ));
+            Assert.IsFalse(generatedJs.Contains(
+                @"b = $thisType.IncrementArgumentValue(a.MemberwiseClone()).MemberwiseClone()"
+            ), "Return value was cloned inside b assignment (a is already cloned)");
         }
 
         [Test]
@@ -205,12 +219,9 @@ namespace JSIL.Tests {
 
             Console.WriteLine(generatedJs);
 
-            // FIXME: Static analyzer too terrible.
-            /*
             Assert.IsFalse(generatedJs.Contains(
                 @".MemberwiseClone()"
             ), "a value was cloned");
-             */
         }
 
         [Test]
@@ -253,12 +264,9 @@ namespace JSIL.Tests {
             );
 
             Console.WriteLine(generatedJs);
-            Assert.IsTrue(Regex.IsMatch(
-                generatedJs,
-                @"b = \$thisType.ReturnArgument\(" +
-                @"\$thisType.ReturnIncrementedArgument\(\$thisType.ReturnArgument\(a\)." +
-                @"MemberwiseClone\(\)\)\).MemberwiseClone\(\)"
-            ));
+
+            var cloneCount = Regex.Matches(generatedJs, @".MemberwiseClone\(\)").Count;
+            Assert.AreEqual(1, cloneCount, "Expected 1 struct clone");
         }
 
         [Test]
@@ -471,7 +479,7 @@ namespace JSIL.Tests {
 
         [Test]
         public void ImmutableStructThisAssignment () {
-            var output = "2 2\r\n1 2";
+            var output = "2 2\r\n1 2\r\n3\r\n3";
 
             var generatedJs = GenericTest(
                 @"AnalysisTestCases\ImmutableStructThisAssignment.cs",
@@ -721,6 +729,30 @@ namespace JSIL.Tests {
 
             var generatedJs = GenericTest(
                 @"AnalysisTestCases\Issue395.cs",
+                output, output
+            );
+
+            Console.WriteLine(generatedJs);
+        }
+
+        [Test]
+        public void Issue494_ByValue () {
+            string output = "0";
+
+            var generatedJs = GenericTest(
+                @"AnalysisTestCases\Issue494.cs",
+                output, output
+            );
+
+            Console.WriteLine(generatedJs);
+        }
+
+        [Test]
+        public void Issue494_ByRef () {
+            string output = "1";
+
+            var generatedJs = GenericTest(
+                @"AnalysisTestCases\Issue494_2.cs",
                 output, output
             );
 
