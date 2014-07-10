@@ -235,6 +235,7 @@
     <None Include="SimpleTestCases\FloatArrayInitializer.cs" />
     <None Include="SimpleTestCases\StaticConstructorAndFieldAccess.cs" />
     <None Include="SimpleTestCases\StaticConstructorAndFieldAccess2.cs" />
+    <None Include="SimpleTestCases\DelegateRemove.cs" />
     <None Include="SimpleTestCases\DelegateRemoveAdvanced.cs" />
     <None Include="SimpleTestCases\DecimalCast.cs" />
     <None Include="SimpleTestCases\DecimalCopy.cs" />
@@ -377,6 +378,7 @@
     <None Include="SimpleTestCases\NullableCloneParameter_Issue316.cs" />
     <None Include="SimpleTestCases\NullableModification_Issue361.cs" />
     <None Include="SimpleTestCases\NullableNullAccess.cs" />
+    <None Include="SimpleTestCases\SignatureCacheDoubleGeneric_Issue547.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\JSIL\JSIL.csproj">
