@@ -31,7 +31,7 @@
     </script>
     <script src="Libraries/JSIL.js" type="text/javascript"></script>
     
-    <label for="scriptname">Test Script To Run:</label> <input type="text" name="scriptname" id="scriptname" value="Tests/SimpleTestCases/If.js"></input><br>
+    <label for="scriptname">Test Script To Run:</label> <input type="text" name="scriptname" id="scriptname" value="Tests/SimpleTestCases/If.cs.out"></input><br>
     <button id="runscript" name="runscript">Run</button>
     
     <hr>
@@ -42,6 +42,7 @@
     
     <script type="text/javascript">
       var _started = Date.now();
+      var scriptAlreadyRan = false;
     
       function print (text) {
         console.log(text);
@@ -56,15 +57,36 @@
       }
     
       function runScript () {
+        if (scriptAlreadyRan) {
+          setTimeout(function () {
+            var newUrl = window.location.protocol + 
+              "//" +
+              window.location.host +
+              window.location.pathname + 
+              "?autoRun" +
+              window.location.hash;
+
+            if (window.location.href === newUrl)
+              window.location.reload(true);
+            else
+              window.location.replace(newUrl);
+          }, 1);
+          return;
+        }
+
+        scriptAlreadyRan = true;
         document.getElementById("runscript").disabled = true;
 
         var scriptname = document.getElementById("scriptname").value;
         window.location.hash = "#" + scriptname;
 
-        contentManifest["TestRunner"] = [
-          ["Script", scriptname]
-        ];
-        onLoad();
+        setTimeout(function () {
+          contentManifest["TestRunner"] = [
+            ["Script", scriptname]
+          ];
+          onLoad();
+          document.getElementById("runscript").disabled = false;
+        }, 25);
       }
 
       function runMain () {
@@ -93,6 +115,10 @@
         setInterval(checkHash, 100);
         button.removeAttribute("disabled");
         button.addEventListener("click", runScript, true);
+
+        if (window.location.search.indexOf("autoRun") >= 0) {
+          window.setTimeout(runScript, 25);
+        }
       }
 
       // UGH

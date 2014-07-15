@@ -113,6 +113,9 @@
     <None Include="AnalysisTestCases\Issue371.cs" />
     <None Include="AnalysisTestCases\Issue494.cs" />
     <None Include="AnalysisTestCases\Issue494_2.cs" />
+    <Compile Include="CILCodeProvider.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="ComparisonTest.cs" />
     <Compile Include="ComparisonTests.cs" />
     <None Include="FailingTestCases\BaseFields.cs" />
@@ -223,6 +226,8 @@
     <None Include="PerformanceTestCases\BaseMethodCalls.cs" />
     <None Include="TestCases\EnumClone.cs" />
     <None Include="SpecialTestCases\Issue548.cs" />
+    <None Include="SpecialTestCases\MgTextureReader.cs" />
+    <None Include="SpecialTestCases\MgDxtDecode.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />
@@ -385,6 +390,7 @@
     <None Include="UnsafeTestCases\PackedStructArrayArgument.cs" />
     <None Include="UnsafeTestCases\PackedStructArrayNew.cs" />
     <None Include="UnsafeTestCases\CastAddressOfValueToArray.cs" />
+    <None Include="UnsafeTestCases\IgnorePointerFields.cs" />
     <Compile Include="XMLTests.cs" />
     <Compile Include="DependencyTests.cs" />
     <None Include="TestCases\GenericParameterNameShadowing.cs" />
@@ -598,7 +604,6 @@
     <None Include="SpecialTestCases\InnerClassNameFormatting_Issue352.cs" />
     <None Include="TestCases\DictionaryInterfaces.cs" />
     <None Include="SpecialTestCases\PreventFastMethodDispatcherIfHideBase_Issue368.cs" />
-    <None Include="UnsafeTestCases\IgnorePointerFields.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\JSIL\JSIL.csproj">

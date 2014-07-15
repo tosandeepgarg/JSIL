@@ -383,8 +383,10 @@ namespace JSIL {
 
             // Detect attempts to perform pointer arithmetic on a local variable.
             // (ldloca produces a reference, not a pointer, so the previous check won't catch this.)
-            if ((node.Arguments[0].Code == ILCode.Ldloca) &&
-                !(op is JSAssignmentOperator))
+            if (
+                (node.Arguments[0].Code == ILCode.Ldloca) &&
+                !(op is JSAssignmentOperator)
+            )
                 return new JSUntranslatableExpression(node);
 
             JSExpression lhs, rhs;
@@ -404,6 +406,38 @@ namespace JSIL {
                 return new JSUntranslatableExpression(node);
 
             var resultType = node.InferredType ?? node.ExpectedType;
+            var leftType = lhs.GetActualType(TypeSystem);
+            var rightType = rhs.GetActualType(TypeSystem);
+
+            if (
+                TypeUtil.IsIntegral(leftType) && 
+                TypeUtil.IsIntegral(rightType) &&
+                TypeUtil.IsIntegral(resultType) &&
+                !(op is JSBitwiseOperator)
+            ) {
+                var sizeofLeft = TypeUtil.SizeOfType(leftType);
+                var sizeofRight = TypeUtil.SizeOfType(rightType);
+                TypeReference largestType;
+
+                if (sizeofLeft > sizeofRight) 
+                    largestType = leftType;
+                else
+                    largestType = rightType;
+
+                var sizeofInferred = (node.InferredType != null) && TypeUtil.IsIntegral(node.InferredType)
+                    ? TypeUtil.SizeOfType(node.InferredType)
+                    : 0;
+                var sizeofExpected = (node.ExpectedType != null) && TypeUtil.IsIntegral(node.ExpectedType)
+                    ? TypeUtil.SizeOfType(node.ExpectedType)
+                    : 0;
+
+                if (TypeUtil.SizeOfType(largestType) > Math.Max(sizeofInferred, sizeofExpected)) {
+                    // HACK: ILSpy's completely broken type inference strikes again.
+                    // FIXME: Get the sign right?
+                    resultType = largestType;
+                }
+            }
+
             var result = new JSBinaryOperatorExpression(
                 op, lhs, rhs, resultType
             );
@@ -1632,7 +1666,8 @@ namespace JSIL {
                         operandLhs = JSReferenceExpression.Strip(operandLhs);
 
                         result = new JSBinaryOperatorExpression(
-                            JSOperator.Assignment, operandLhs,
+                            JSOperator.Assignment, 
+                            DecomposeMutationOperators.MakeLhsForAssignment(operandLhs),
                             translated, translated.GetActualType(TypeSystem)
                         );
                         return result;
@@ -1709,12 +1744,15 @@ namespace JSIL {
                 } else if (op == null) {
                     // Unimplemented compound operators, and operators with semantics that don't match JS, must be emitted normally
                     result = new JSBinaryOperatorExpression(
-                        JSOperator.Assignment, boe.Left,
+                        JSOperator.Assignment, 
+                        DecomposeMutationOperators.MakeLhsForAssignment(boe.Left),
                         boe, boe.ActualType
                     );
                 } else {
                     result = new JSBinaryOperatorExpression(
-                        op, boe.Left, boe.Right, boe.ActualType
+                        op, 
+                        DecomposeMutationOperators.MakeLhsForAssignment(boe.Left), boe.Right, 
+                        boe.ActualType
                     );
                 }
             } else if ((invocation != null) && (invocation.Arguments[0] is JSReferenceExpression)) {
@@ -1729,7 +1767,8 @@ namespace JSIL {
 
                 result = new JSBinaryOperatorExpression(
                     JSOperator.Assignment,
-                    lhs, invocation, invocation.GetActualType(TypeSystem)
+                    DecomposeMutationOperators.MakeLhsForAssignment(lhs), 
+                    invocation, invocation.GetActualType(TypeSystem)
                 );
             } else {
                 throw new NotImplementedException(String.Format("Compound assignments of this type not supported: '{0}'", node));
@@ -1834,33 +1873,64 @@ namespace JSIL {
             );
         }
 
+        private TypeReference DetermineOutputTypeForMultiply (JSExpression left, JSExpression right) {
+            var leftType = left.GetActualType(TypeSystem);
+            var rightType = right.GetActualType(TypeSystem);
+            var leftIsIntegral = TypeUtil.IsIntegral(leftType);
+            var rightIsIntegral = TypeUtil.IsIntegral(rightType);
+
+            if (!leftIsIntegral || !rightIsIntegral)
+                return null;
+
+            var sizeofLeft = TypeUtil.SizeOfType(leftType);
+            var sizeofRight = TypeUtil.SizeOfType(rightType);
+
+            var largerType = (sizeofLeft > sizeofRight)
+                ? leftType
+                : rightType;
+
+            if (TypeUtil.IsSigned(leftType) != TypeUtil.IsSigned(rightType)) {
+                // Promote up to Int64 if signs don't match, just in case.
+                return TypeSystem.Int64;
+            } else if (TypeUtil.SizeOfType(largerType) < 4) {
+                // Muls are always at least int32.
+                if (TypeUtil.IsSigned(largerType).Value) {
+                    return TypeSystem.Int32;
+                } else {
+                    return TypeSystem.UInt32;
+                }
+            } else {
+                // Otherwise, return the largest type.
+                return largerType;
+            }
+        }
+
         protected JSExpression Translate_Mul (ILExpression node) {
-            if (TypeUtil.IsIntegral(node.ExpectedType ?? node.InferredType)) {
+            var ilSpySays = node.ExpectedType ?? node.InferredType;
+            if (TypeUtil.IsIntegral(ilSpySays)) {
                 var left = TranslateNode(node.Arguments[0]);
                 var right = TranslateNode(node.Arguments[1]);
-                var leftType = left.GetActualType(TypeSystem);
-                var rightType = right.GetActualType(TypeSystem);
+
+                var outputType = DetermineOutputTypeForMultiply(
+                    left, right
+                );
 
                 // FIXME: This may be too strict.
                 // We do this to ensure that certain multiply operations don't erroneously get replaced with imul, like
                 //  (int)(float * int)
                 // If this is too strict then we will fail to use imul in scenarios where we should have. :(
-                if (
-                    TypeUtil.IsIntegral(leftType) &&
-                    TypeUtil.IsIntegral(rightType) &&
-                    TypeUtil.TypesAreEqual(leftType, rightType) &&
-                    TypeUtil.TypesAreEqual(leftType, node.ExpectedType)
-                ) {
+                if (outputType != null) {
+                    switch (outputType.FullName) {
+                        case "System.UInt32":
+                            return new JSUInt32MultiplyExpression(
+                                left, right, TypeSystem
+                            );
 
-                    if (node.ExpectedType.FullName == "System.UInt32")
-                        return new JSUInt32MultiplyExpression(
-                            left, right, TypeSystem
-                        );
-                    else if (node.ExpectedType.FullName == "System.Int32")
-                        return new JSInt32MultiplyExpression(
-                            left, right, TypeSystem
-                        );
-
+                        case "System.Int32":
+                            return new JSInt32MultiplyExpression(
+                                left, right, TypeSystem
+                            );
+                    }
                 }
             }
 
@@ -1868,11 +1938,11 @@ namespace JSIL {
         }
 
         protected JSExpression Translate_Mul_Ovf (ILExpression node) {
-            return JSOverflowCheckExpression.New(Translate_BinaryOp(node, JSOperator.Multiply), TypeSystem);
+            return JSOverflowCheckExpression.New(Translate_Mul(node), TypeSystem);
         }
 
         protected JSExpression Translate_Mul_Ovf_Un (ILExpression node) {
-            return JSOverflowCheckExpression.New(Translate_BinaryOp(node, JSOperator.Multiply), TypeSystem);
+            return JSOverflowCheckExpression.New(Translate_Mul(node), TypeSystem);
         }
 
         protected JSExpression Translate_Div (ILExpression node) {
@@ -2074,7 +2144,7 @@ namespace JSIL {
                 return new JSIgnoredTypeReference(true, valueType);
 
             return new JSBinaryOperatorExpression(
-                JSOperator.Assignment, jsv,
+                JSOperator.Assignment, DecomposeMutationOperators.MakeLhsForAssignment(jsv),
                 value, valueType
             );
         }
@@ -2095,36 +2165,18 @@ namespace JSIL {
         }
 
         protected JSExpression Translate_Ldsfld (ILExpression node, FieldReference field) {
-            var fieldInfo = GetField(field);
-            if (fieldInfo == null)
-                return new JSIgnoredMemberReference(true, null, JSLiteral.New(field.FullName));
-            else if (TypeUtil.IsIgnoredType(fieldInfo.FieldType) || fieldInfo.IsIgnored)
-                return new JSIgnoredMemberReference(true, fieldInfo);
+            var result = Translate_FieldAbstract(node, field, false);
 
-            JSExpression result = new JSFieldAccess(
-                new JSType(field.DeclaringType),
-                new JSField(field, fieldInfo)
-            );
-
-            if (CopyOnReturn(fieldInfo.FieldType))
+            if (CopyOnReturn(field.FieldType))
                 result = JSReferenceExpression.New(result);
 
             return result;
         }
 
         protected JSExpression Translate_Ldsflda (ILExpression node, FieldReference field) {
-            var fieldInfo = GetField(field);
-            if (fieldInfo == null)
-                return new JSIgnoredMemberReference(true, null, JSLiteral.New(field.FullName));
-            else if (TypeUtil.IsIgnoredType(field.FieldType) || fieldInfo.IsIgnored)
-                return new JSIgnoredMemberReference(true, fieldInfo);
+            var result = Translate_FieldAbstract(node, field, false);
 
-            return new JSMemberReferenceExpression(
-                new JSFieldAccess(
-                    new JSType(field.DeclaringType),
-                    new JSField(field, fieldInfo)
-                )
-            );
+            return new JSMemberReferenceExpression(result);
         }
 
         protected JSBinaryOperatorExpression Translate_Stsfld (ILExpression node, FieldReference field) {
@@ -2132,40 +2184,61 @@ namespace JSIL {
 
             return new JSBinaryOperatorExpression(
                 JSOperator.Assignment,
-                Translate_Ldsfld(node, field),
+                DecomposeMutationOperators.MakeLhsForAssignment(Translate_FieldAbstract(node, field, true)),
                 rhs,
                 rhs.GetActualType(TypeSystem)
             );
         }
 
-        protected JSExpression Translate_Ldfld (ILExpression node, FieldReference field) {
-            var firstArg = node.Arguments[0];
-            var translated = TranslateNode(firstArg);
+        protected JSExpression Translate_FieldAbstract (ILExpression expr, FieldReference field, bool isWrite) {
+            JSExpression thisExpression = null;
+            ILExpression firstArgExpr;
+            if (
+                (expr.Code == ILCode.Ldsfld) ||
+                (expr.Code == ILCode.Ldsflda) ||
+                (expr.Code == ILCode.Stsfld)
+            ) {
+                var mr = (MemberReference)expr.Operand;
+                thisExpression = new JSType(mr.DeclaringType);
+            } else {
+                firstArgExpr = expr.Arguments[0];
+                var firstArg = TranslateNode(firstArgExpr);
+
+                if (IsInvalidThisExpression(firstArgExpr)) {
+                    if (!JSReferenceExpression.TryDereference(JSIL, firstArg, out thisExpression)) {
+                        if (!firstArg.IsNull)
+                            WarningFormatFunction("Accessing {0} without a reference as this.", field.FullName);
+
+                        thisExpression = firstArg;
+                    }
+                } else {
+                    thisExpression = firstArg;
+                }
+            }
 
             // GetCallSite and CreateCallSite produce null expressions, so we want to ignore field references containing them
-            if ((translated.IsNull) && !(translated is JSUntranslatableExpression) && !(translated is JSIgnoredExpression))
+            if (
+                (thisExpression.IsNull) && 
+                !(thisExpression is JSUntranslatableExpression) && 
+                !(thisExpression is JSIgnoredExpression)
+            )
                 return new JSNullExpression();
 
             var fieldInfo = GetField(field);
             if (TypeUtil.IsIgnoredType(field.FieldType) || (fieldInfo == null) || fieldInfo.IsIgnored)
-                return new JSIgnoredMemberReference(true, fieldInfo, translated);
-
-            JSExpression thisExpression;
-            if (IsInvalidThisExpression(firstArg)) {
-                if (!JSReferenceExpression.TryDereference(JSIL, translated, out thisExpression)) {
-                    if (!translated.IsNull)
-                        WarningFormatFunction("Accessing {0} without a reference as this.", field.FullName);
-
-                    thisExpression = translated;
-                }
-            } else {
-                thisExpression = translated;
-            }
+                return new JSIgnoredMemberReference(true, fieldInfo, thisExpression);
 
             JSExpression result = new JSFieldAccess(
                 thisExpression,
-                new JSField(field, fieldInfo)
+                new JSField(field, fieldInfo),
+                isWrite
             );
+
+            return result;
+        }
+
+        protected JSExpression Translate_Ldfld (ILExpression node, FieldReference field) {
+            var result = Translate_FieldAbstract(node, field, false);
 
             if (CopyOnReturn(field.FieldType))
                 result = JSReferenceExpression.New(result);
@@ -2178,35 +2251,13 @@ namespace JSIL {
 
             return new JSBinaryOperatorExpression(
                 JSOperator.Assignment,
-                Translate_Ldfld(node, field),
+                DecomposeMutationOperators.MakeLhsForAssignment(Translate_FieldAbstract(node, field, true)),
                 rhs, rhs.GetActualType(TypeSystem)
             );
         }
 
         protected JSExpression Translate_Ldflda (ILExpression node, FieldReference field) {
-            var firstArg = node.Arguments[0];
-            var translated = TranslateNode(firstArg);
-
-            var fieldInfo = GetField(field);
-            if (TypeUtil.IsIgnoredType(field.FieldType) || (fieldInfo == null) || fieldInfo.IsIgnored)
-                return new JSIgnoredMemberReference(true, fieldInfo, translated);
-
-            JSExpression thisExpression;
-            if (IsInvalidThisExpression(firstArg)) {
-                if (!JSReferenceExpression.TryDereference(JSIL, translated, out thisExpression)) {
-                    if (!translated.IsNull)
-                        Translator.WarningFormat("Accessing {0} without a reference as this.", field.FullName);
-
-                    thisExpression = translated;
-                }
-            } else {
-                thisExpression = translated;
-            }
-
-            return new JSMemberReferenceExpression(new JSFieldAccess(
-                thisExpression,
-                new JSField(field, fieldInfo)
-            ));
+            return new JSMemberReferenceExpression(Translate_FieldAbstract(node, field, false));
         }
 
         protected JSExpression Translate_Ldobj (ILExpression node, TypeReference type) {
@@ -2251,7 +2302,7 @@ namespace JSIL {
                 targetVariable = targetChangeType.Expression as JSVariable;
 
             var targetType = target.GetActualType(TypeSystem);
-            if (targetType.IsPointer)
+            if (targetType.IsPointer && !valueType.IsPointer)
                 return new JSWriteThroughPointerExpression(target, value, valueType);
 
             if (targetVariable != null) {
@@ -2270,7 +2321,9 @@ namespace JSIL {
             }
 
             return new JSBinaryOperatorExpression(
-                JSOperator.Assignment, target, value, node.InferredType ?? node.ExpectedType ?? value.GetActualType(TypeSystem)
+                JSOperator.Assignment, 
+                DecomposeMutationOperators.MakeLhsForAssignment(target), value, 
+                node.InferredType ?? node.ExpectedType ?? value.GetActualType(TypeSystem)
             );
         }
 

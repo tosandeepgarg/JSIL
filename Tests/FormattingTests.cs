@@ -83,7 +83,7 @@ namespace JSIL.Tests {
             try {
                 Assert.IsFalse(generatedJs.Contains(".TryGetValue"));
 
-                Assert.IsTrue(generatedJs.Contains("for (var i = 0; i < args.length; i = "), "Was not a for loop with an increment");
+                Assert.IsTrue(generatedJs.Contains("for (var i = 0; i < (args.length | 0); i = "), "Was not a for loop with an increment");
 
                 Assert.IsTrue(generatedJs.Contains("switch (text)"), "Didn't find switch (text)");
                 Assert.IsTrue(generatedJs.Contains("case \"howdy\""), "Didn't find string cases");
@@ -247,12 +247,18 @@ namespace JSIL.Tests {
             );
 
             try {
+                // Welp.
+                /*
                 Assert.IsTrue(generatedJs.Contains("this.i"));
                 Assert.IsTrue(generatedJs.Contains("this.$state"));
                 Assert.IsTrue(generatedJs.Contains("this.$current"));
                 Assert.IsFalse(generatedJs.Contains(".$li$g"));
                 Assert.IsFalse(generatedJs.Contains(".$l$g1__state"));
                 Assert.IsFalse(generatedJs.Contains(".$l$g2__current"));
+                 */
+                Assert.IsTrue(generatedJs.Contains(".$li$g"));
+                Assert.IsTrue(generatedJs.Contains(".$l$g1__state"));
+                Assert.IsTrue(generatedJs.Contains(".$l$g2__current"));
             } catch {
                 Console.WriteLine(generatedJs);
 
@@ -383,17 +389,17 @@ namespace JSIL.Tests {
 
                 var m = Regex.Match(
                     generatedJs,
-                    @"if \(this.i \>\= this.count\) \{[^}]*\} else \{"
+                    @"if \(\(this.(\$li\$g5__1|i) \| 0\) \>\= \(this.(\$l\$g3__count|count) \| 0\)\) \{[^}]*\} else \{"
                 );
                 bool foundElse = (m != null) && m.Success;
-
+                
                 m = Regex.Match(
                     generatedJs,
-                    @"if \(this.i \< this.count\) \{[^}]*\}"
+                    @"if \(\(this.(\$li\$g5__1|i) \| 0\) \< \(this.(\$l\$g3__count|count) \| 0\)\) \{[^}]*\}"
                 );
                 bool foundIf = (m != null) && m.Success;
 
-                Assert.IsTrue(foundElse || foundIf);
+                Assert.IsTrue(foundElse || foundIf, "Looked for else or if");
 
                 if (foundElse) {
                     Assert.IsTrue(m.Value.Contains("continue $labelgroup0;"), "If block true clause left empty when hoisting out label");
@@ -1075,6 +1081,52 @@ namespace JSIL.Tests {
                 Console.WriteLine(generatedJs);
 
                 throw;
+            }
+        }
+
+        [Test]
+        public void MgTextureReader () {
+            var testFile = @"SpecialTestCases\MgTextureReader.cs";
+
+            var generatedJs = GetJavascript(testFile);
+
+            try {
+                Assert.IsTrue(generatedJs.Contains("Math.imul(y, pitch) + Math.imul(x, bytesPerPixel)"));
+                Assert.IsTrue(generatedJs.Contains("Math.imul(y, pitch) + Math.imul(x, 4)"));
+                // TODO: Optimize out the double & here?
+                Assert.IsTrue(generatedJs.Contains("((color >> 16) & 255 & 0xFF)"));
+            } catch {
+                Console.WriteLine(generatedJs);
+
+                throw;
+            }
+        }
+
+        [Test]
+        public void MgDxtDecode () {
+            var testFile = @"SpecialTestCases\MgDxtDecode.cs";
+
+            var generatedJs = GetJavascript(testFile);
+
+            try {
+                Assert.IsTrue(generatedJs.Contains("var temp = ((Math.imul"), "ILSpy suppressed imul");
+                // FIXME: I think there's another error here to test for.
+            } catch {
+                Console.WriteLine(generatedJs);
+
+                throw;
+            }
+        }
+
+        [Test]
+        public void MgDelegateFieldNames () {
+            var testFile = @"BinaryTestCases\MgFuseePackedVertices.exe";
+            var generatedJs = GetJavascript(testFile);
+
+            try {
+                Assert.IsFalse(generatedJs.Contains("$thisType.$mg ==="), "Field names were truncated");
+            } catch {
+                Console.WriteLine(generatedJs);
             }
         }
     }

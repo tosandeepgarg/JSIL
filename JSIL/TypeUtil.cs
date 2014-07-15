@@ -137,6 +137,31 @@ namespace JSIL {
             }
         }
 
+        public static bool? IsSigned (TypeReference type) {
+            type = DereferenceType(type);
+
+            switch (type.MetadataType) {
+                case MetadataType.IntPtr:
+                case MetadataType.SByte:
+                case MetadataType.Int16:
+                case MetadataType.Int32:
+                case MetadataType.Int64:
+                case MetadataType.Single:
+                case MetadataType.Double:
+                    return true;
+
+                case MetadataType.Byte:
+                case MetadataType.UInt16:
+                case MetadataType.UInt32:
+                case MetadataType.UInt64:
+                case MetadataType.UIntPtr:
+                    return false;
+
+                default:
+                    return null;
+            }
+        }
+
         public static bool IsIntegral (TypeReference type) {
             type = DereferenceType(type);
 
@@ -361,6 +386,26 @@ namespace JSIL {
                     unwrapped = true;
                 } else if (omt != null) {
                     reference = omt.ElementType;
+                    unwrapped = true;
+                } else {
+                    unwrapped = false;
+                }
+            } while (unwrapped);
+
+            return reference;
+        }
+
+        public static TypeReference StripPointerOrReference (TypeReference reference) {
+            bool unwrapped = false;
+            do {
+                var pt = reference as PointerType;
+                var brt = reference as ByReferenceType;
+
+                if (pt != null) {
+                    reference = pt.ElementType;
+                    unwrapped = true;
+                } else if (brt != null) {
+                    reference = brt.ElementType;
                     unwrapped = true;
                 } else {
                     unwrapped = false;
