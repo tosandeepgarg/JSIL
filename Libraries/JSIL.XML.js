@@ -914,11 +914,15 @@ JSIL.ImplementExternals("System.Xml.XmlReader", function ($) {
   $.Method({Static:false, Public:true }, "ReadElementString", 
     (new JSIL.MethodSignature($.String, [], [])), 
     function ReadElementString () {
-      this.ReadStartElement();
+      if (!this.IsEmptyElement) {
+        this.ReadStartElement();
 
-      var result = this.ReadString();
-      this.ReadEndElement();
-      return result;
+        var result = this.ReadString();
+        this.ReadEndElement();
+        return result;
+      }
+      this.Read();
+      return "";
     }
   );
 
