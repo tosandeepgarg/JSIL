@@ -580,7 +580,7 @@ namespace JSIL {
 
                 if (result.Configuration.GenerateContentManifest.GetValueOrDefault(true)) {
                     tw.WriteLine();
-                    tw.WriteLine("if (typeof (contentManifest) !== \"object\") { contentManifest = {}; };");
+                    tw.WriteLine("if (typeof (contentManifest) !== \"object\") { JSIL.GlobalNamespace.contentManifest = {}; };");
                     tw.WriteLine("contentManifest[\"" + Path.GetFileName(assemblyPath).Replace("\\", "\\\\") + "\"] = [");
 
                     foreach (var fe in result.OrderedFiles) {
@@ -765,7 +765,7 @@ namespace JSIL {
                             if ((mi == null) || (mi.IsIgnored))
                                 continue;
 
-                            if (isStubbed) {
+                            if (isStubbed && !mi.IsUnstubbable) {
                                 var isProperty = mi.DeclaringProperty != null;
 
                                 if (!(isProperty && m.IsCompilerGenerated()))
@@ -1249,11 +1249,11 @@ namespace JSIL {
                     }
                 }
 
-                if (!makingSkeletons) {
-                    output.Comment("{0} {1}", typedef.IsValueType ? "struct" : "class", Util.DemangleCecilTypeName(typedef.FullName));
-                    output.NewLine();
-                    output.NewLine();
+                output.Comment("{0} {1}", typedef.IsValueType ? "struct" : "class", Util.DemangleCecilTypeName(typedef.FullName));
+                output.NewLine();
+                output.NewLine();
 
+                if (!makingSkeletons) {
                     output.WriteRaw("(function {0}$Members () {{", Util.EscapeIdentifier(typedef.Name));
                     output.Indent();
                     output.NewLine();
@@ -1422,7 +1422,10 @@ namespace JSIL {
                 return false;
 
             var typeInfo = _TypeInfoProvider.GetTypeInformation(typedef);
-            if ((typeInfo == null) || typeInfo.IsIgnored || typeInfo.IsProxy || typeInfo.IsExternal)
+            if ((typeInfo == null) || typeInfo.IsIgnored || typeInfo.IsProxy)
+                return false;
+
+            if (typeInfo.IsExternal && typeInfo.UnstubbableMemberCount == 0)
                 return false;
 
             if (typedef.IsInterface)
@@ -2543,7 +2546,7 @@ namespace JSIL {
             methodIsProxied = (methodInfo.IsFromProxy && methodInfo.Member.HasBody) &&
                 !methodInfo.IsExternal && !isReplaced;
 
-            isExternal = methodInfo.IsExternal || (stubbed && !methodIsProxied);
+            isExternal = methodInfo.IsExternal || (stubbed && !methodIsProxied && !methodInfo.IsUnstubbable);
         }
 
         protected bool ShouldTranslateMethodBody (

@@ -3915,17 +3915,35 @@ JSIL.$ApplyMemberHiding = function (typeObject, memberList, resolveContext) {
   //  properties or methods - we need to access the data members directly.
 
   var comparer = function (lhs, rhs) {
-    var lhsHash = lhs._data.signature.get_Hash();
-    var rhsHash = rhs._data.signature.get_Hash();
+    var lhsCount = lhs._data.signature.argumentTypes.length; 
+    var rhsCount = rhs._data.signature.argumentTypes.length; 
 
-    var result = JSIL.CompareValues(lhsHash, rhsHash);
+    // Group by argument count.
+    var result = JSIL.CompareValues(lhsCount, rhsCount);
 
+    // Sub-cluster by hash (the hash encodes argument types, etc.)
+    if (result === 0) {
+      var lhsHash = lhs._data.signature.get_Hash();
+      var rhsHash = rhs._data.signature.get_Hash();
+
+      result = JSIL.CompareValues(lhsHash, rhsHash);
+    }
+
+    // Non-placeholders override placeholders.
     if (result === 0)
       result = JSIL.CompareValues(
         lhs._data.isPlaceholder ? 1 : 0,
         rhs._data.isPlaceholder ? 1 : 0
       );
 
+    // Non-externals override externals.
+    if (result === 0)
+      result = JSIL.CompareValues(
+        lhs._data.isExternal ? 1 : 0,
+        rhs._data.isExternal ? 1 : 0
+      );
+
+    // A derived type's methods override inherited methods.
     if (result === 0)
       result = -JSIL.CompareValues(
         lhs._typeObject.__InheritanceDepth__, 
@@ -3947,7 +3965,34 @@ JSIL.$ApplyMemberHiding = function (typeObject, memberList, resolveContext) {
   var originalCount = memberList.length;
 
   var currentSignatureHash = null;
+  var currentArgumentCount = null;
   var currentGroupStart;
+
+  var groupUpdate = function (i, memberSignature) {
+    var argumentCount = memberSignature.argumentTypes.length;
+    var memberSignatureHash = memberSignature.get_Hash();
+
+    if (
+      (currentArgumentCount === null) ||
+      (currentSignatureHash === null) || 
+      (currentArgumentCount != argumentCount) ||
+      (
+        (currentSignatureHash != memberSignatureHash) &&
+        // *Every* method with zero arguments is a part of a group, no matter what.
+        // They will automatically sort into one group because they all start with '$void='
+        (currentArgumentCount !== 0)
+      )
+    ) {
+      // New group
+      currentArgumentCount = argumentCount;
+      currentSignatureHash = memberSignatureHash;
+      currentGroupStart = i;
+
+      return false;
+    } else {
+      return true;
+    }
+  };
 
   var trace = false;
   var traceOut = function () {
@@ -3955,7 +4000,7 @@ JSIL.$ApplyMemberHiding = function (typeObject, memberList, resolveContext) {
       console.log.apply(console, arguments);
     else
       print.apply(null, arguments);
-  }
+  };
 
   var memberName = memberList[0]._descriptor.Name;
 
@@ -3964,20 +4009,35 @@ JSIL.$ApplyMemberHiding = function (typeObject, memberList, resolveContext) {
     var member = memberList[i];
     var memberSignature = member._data.signature;
 
-    var memberSignatureHash = memberSignature.get_Hash();
+    var isHidden = groupUpdate(i, memberSignature);
 
-    if ((currentSignatureHash === null) || (currentSignatureHash != memberSignatureHash)) {
-      // New group
-      currentSignatureHash = memberSignatureHash;
-      currentGroupStart = i;
-    } else {
+    if (isHidden) {
       var hidingMember = memberList[currentGroupStart];
 
       if (trace) {
+        var localMemberName =
+          member._typeObject.__FullName__ + 
+          "." + member._descriptor.Name;
+        var hidingMemberName = 
+          hidingMember._typeObject.__FullName__ + 
+          "." + hidingMember._descriptor.Name;
+
+        var memberSuffix = "", hidingMemberSuffix = "";
+        if (member._data.isPlaceholder)
+          memberSuffix = " (placeholder)";
+        else if (member._data.isExternal)
+          memberSuffix = " (external)";
+
+        if (hidingMember._data.isPlaceholder)
+          hidingMemberSuffix = " (placeholder)";
+        else if (hidingMember._data.isExternal)
+          hidingMemberSuffix = " (external)";
+
         traceOut(
-          "Purged " + member._typeObject.__FullName__ + "'s version of " + 
-            member._descriptor.Name + " because it is hidden by " + hidingMember._typeObject.__FullName__ + 
-            "." + hidingMember._descriptor.Name
+          memberName + ": Purged " + 
+          localMemberName + memberSuffix +
+          " because it is hidden by " + 
+          hidingMemberName + hidingMemberSuffix
         );
       }
 
@@ -4126,11 +4186,22 @@ JSIL.$BuildMethodGroups = function (typeObject, publicInterface, forceLazyMethod
     });
 
     var entries = [];
+    var numZeroArgEntries = 0;
 
     for (var i = 0, l = entriesToSort.length; i < l; i++) {
       var method = entriesToSort[i];
 
       entries.push(method.signature);
+
+      if (method.signature.argumentTypes.length === 0) {
+        numZeroArgEntries += 1;
+      }
+    }
+
+    if (numZeroArgEntries > 1) {
+      throw new Error(
+        "Method '" + methodName + "' has more than one zero-argument overload"
+      );
     }
 
     var target = isStatic ? publicInterface : publicInterface.prototype;
@@ -4170,6 +4241,10 @@ JSIL.$BuildMethodGroups = function (typeObject, publicInterface, forceLazyMethod
         return methodGroupTarget;
       };
     };
+
+    if (trace) {
+      console.log(typeObject.__FullName__ + "[" + methodEscapedName + "] = ", getter);
+    }
 
     if (active) {    
       var getter = makeMethodGroupGetter(
@@ -6205,6 +6280,36 @@ JSIL.InterfaceBuilder.prototype.PushMember = function (type, descriptor, data, m
   return members.length - 1;
 };
 
+JSIL.$PlaceExternalMember = function (
+  target, implementationSource, implementationPrefix,
+  memberName, namespace, getDisplayName
+) {
+  var newValue = null;
+  var existingValue = target[memberName];
+
+  if (implementationSource.hasOwnProperty(implementationPrefix + memberName)) {
+    newValue = implementationSource[implementationPrefix + memberName][1];
+  } else if (!target.hasOwnProperty(memberName)) {
+    if (!getDisplayName)
+      getDisplayName = function () { return memberName; };
+
+    newValue = JSIL.MakeExternalMemberStub(namespace, getDisplayName, existingValue);
+    newValue.__PlaceholderFor__ = memberName;
+  }
+
+  if (newValue === null)
+    return;
+
+  if (existingValue === newValue)
+    return;
+
+  if (existingValue) {
+    // console.log("replacing '" + memberName + "':", existingValue, "\r\n with:", newValue);
+  }
+
+  JSIL.SetValueProperty(target, memberName, newValue);
+};
+
 JSIL.InterfaceBuilder.prototype.ExternalMembers = function (isInstance /*, ...names */) {
   var impl = this.externals;
 
@@ -6216,19 +6321,10 @@ JSIL.InterfaceBuilder.prototype.ExternalMembers = function (isInstance /*, ...na
 
   for (var i = 1, l = arguments.length; i < l; i++) {
     var memberName = arguments[i];
-    var memberValue = target[memberName];
-    var newValue = undefined;
 
-    if (impl.hasOwnProperty(prefix + memberName)) {
-      newValue = impl[prefix + memberName][1];
-    } else if (!target.hasOwnProperty(memberName)) {
-      var getName = (function GetMemberName () { return this; }).bind(memberName);
-      newValue = JSIL.MakeExternalMemberStub(this.namespace, getName, memberValue);
-    }
-
-    if (newValue !== undefined) {
-      JSIL.SetValueProperty(target, memberName, newValue);
-    }
+    JSIL.$PlaceExternalMember(
+      target, impl, prefix, memberName, this.namespace, null
+    );
   }
 };
 
@@ -6470,20 +6566,17 @@ JSIL.InterfaceBuilder.prototype.ExternalMethod = function (_descriptor, methodNa
   var prefix = descriptor.Static ? "" : "instance$";
 
   var memberValue = descriptor.Target[mangledName];
-  var newValue = undefined;
+  var newValue = null;
 
   var isPlaceholder;
 
   var fullName = this.namespace + "." + methodName;
 
-  if (impl.hasOwnProperty(prefix + mangledName)) {
-    newValue = impl[prefix + mangledName][1];
-
-    isPlaceholder = false;
-  } else if (!descriptor.Target.hasOwnProperty(mangledName)) {
+  {
     var externalMethods = this.typeObject.__ExternalMethods__;
     var externalMethodIndex = externalMethods.length;
 
+    // FIXME: Avoid doing this somehow?
     externalMethods.push(signature);
 
     var getName = function () {
@@ -6496,14 +6589,11 @@ JSIL.InterfaceBuilder.prototype.ExternalMethod = function (_descriptor, methodNa
 
       return lateBoundSignature.toString(methodName);
     };
-    newValue = JSIL.MakeExternalMemberStub(this.namespace, getName, memberValue);
-
-    isPlaceholder = true;
   }
 
-  if (newValue !== undefined) {
-    JSIL.SetValueProperty(descriptor.Target, mangledName, newValue);
-  }
+  JSIL.$PlaceExternalMember(
+    descriptor.Target, impl, prefix, mangledName, this.namespace, getName
+  );
 
   var isConstructor = (descriptor.EscapedName === "_ctor");
   var memberTypeName = isConstructor ? "ConstructorInfo" : "MethodInfo";

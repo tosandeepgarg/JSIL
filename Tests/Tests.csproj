@@ -228,6 +228,9 @@
     <None Include="SpecialTestCases\Issue548.cs" />
     <None Include="SpecialTestCases\MgTextureReader.cs" />
     <None Include="SpecialTestCases\MgDxtDecode.cs" />
+    <None Include="SpecialTestCases\TranslateTypeInStubbedAssembly.cs" />
+    <None Include="SpecialTestCases\TranslateMethodInStubbedAssembly.cs" />
+    <None Include="SpecialTestCases\TranslateMethodInStubbedType.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />
