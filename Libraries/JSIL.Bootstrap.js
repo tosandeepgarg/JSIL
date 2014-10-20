@@ -380,10 +380,6 @@ $jsilcore.$RemoveDelegate = function (lhs, rhs) {
 JSIL.ImplementExternals("System.Delegate", function ($) {
   var tDelegate = $jsilcore.TypeRef("System.Delegate");
 
-  $.RawMethod(false, "Invoke", function () {
-    return this.__method__.apply(this.__object__, arguments);
-  });
-
   $.Method({Static:false, Public:true }, "GetInvocationList", 
     (new JSIL.MethodSignature($jsilcore.TypeRef("System.Array", [tDelegate]), [], [])), 
     function GetInvocationList () {
@@ -407,13 +403,13 @@ JSIL.ImplementExternals("System.Delegate", function ($) {
       if (!impl) {
         throw new System.Exception("Method has no implementation");
       } else if (typeof (impl) === "function") {
-        return delegatePublicInterface.New(firstArgument, impl);
+        return delegatePublicInterface.New(firstArgument, impl, function () { return method; });
       } else if (Object.getPrototypeOf(impl) === JSIL.InterfaceMethod.prototype) {
         // FIXME: I think this may not work right when the interface method is overloaded.
         var interfaceMethodImplementation =
           impl.LookupMethod(firstArgument);
 
-        return delegatePublicInterface.New(firstArgument, interfaceMethodImplementation);
+        return delegatePublicInterface.New(firstArgument, interfaceMethodImplementation, function () { throw new Error("Not implemented"); });
       }
     }
   );  
@@ -439,13 +435,45 @@ JSIL.ImplementExternals("System.Delegate", function ($) {
     (new JSIL.MethodSignature(tDelegate, [tDelegate, tDelegate], [])), 
     $jsilcore.$RemoveDelegate
   );
+  
+  $.Method({Static:false , Public:true }, "get_Method", 
+    (new JSIL.MethodSignature.Return($jsilcore.TypeRef("System.Reflection.MethodInfo"))), 
+    function get_Method() {
+      if (this.__isMulticast__)
+      {
+        return this.get_Method();
+      }
+      if (!this.__isMethodInfoResolved__) {
+        var methodInfo = this.__methodInfoResolver__();
+        if (methodInfo.get_DeclaringType().get_IsInterface()) {
+          // TODO: find better solution for resolving MethodInfo in class by interface MethodInfo.
+          // TODO: this will not work for interface generic methods.
+          methodInfo = null;
+          var allMethods = JSIL.GetMembersInternal(
+            this.__object__.__ThisType__, 
+            $jsilcore.BindingFlags.$Flags("DeclaredOnly", "Public", "NonPublic", "Instance"),
+            "$AllMethods");
+          for (var i=0; i < allMethods.length; i++) {
+            var impl = JSIL.$GetMethodImplementation(allMethods[i], this.__object__);
+            if (impl === this.__method__) {
+              methodInfo = allMethods[i];
+              break;
+            }
+          }
+          
+          if (methodInfo === null) {
+            throw new Error("Method info not found");
+          }          
+        }
+        JSIL.SetValueProperty(this, "__methodInfo__", methodInfo);
+        this.__isMethodInfoResolved__ = true;
+      }
+      return this.__methodInfo__;
+    }
+  );
 });
 
 JSIL.ImplementExternals("System.MulticastDelegate", function ($) {
-  $.RawMethod(false, "Invoke", function () {
-    return this.apply(null, arguments);
-  });
-
   $.Method({Static:false, Public:true }, "GetInvocationList", 
     (new JSIL.MethodSignature($jsilcore.TypeRef("System.Array", [$jsilcore.TypeRef("System.Delegate")]), [], [])), 
     function GetInvocationList () {
@@ -454,8 +482,11 @@ JSIL.ImplementExternals("System.MulticastDelegate", function ($) {
   );
 });
 
-JSIL.MakeClass("System.Object", "System.Delegate", true, []);
-JSIL.MakeClass("System.Object", "System.MulticastDelegate", true, []);
+JSIL.MakeClass("System.Object", "System.Delegate", true, [], function ($) {
+	$.Property({Public: true , Static: false}, "Method");
+});
+
+JSIL.MakeClass("System.Delegate", "System.MulticastDelegate", true, []);
 
 JSIL.MulticastDelegate.New = function (delegates) {
   var delegatesCopy = Array.prototype.slice.call(delegates);
@@ -475,23 +506,32 @@ JSIL.MulticastDelegate.New = function (delegates) {
 
   JSIL.SetValueProperty(resultDelegate, "__delegates__", delegatesCopy);
   JSIL.SetValueProperty(resultDelegate, "__isMulticast__", true);
-  JSIL.SetValueProperty(resultDelegate, "__ThisType__", delegates[0].__ThisType__);
-  JSIL.SetValueProperty(resultDelegate, "toString", delegates[0].toString);
+  JSIL.SetValueProperty(resultDelegate, "__ThisType__", delegatesCopy[0].__ThisType__);
+  JSIL.SetValueProperty(resultDelegate, "toString", delegatesCopy[0].toString);
+  JSIL.SetValueProperty(resultDelegate, "__method__", resultDelegate);
+  JSIL.SetValueProperty(resultDelegate, "Invoke", resultDelegate);
+  JSIL.SetValueProperty(resultDelegate, "get_Method", function () { return delegatesCopy[delegateCount-1].get_Method(); });
 
   return resultDelegate;
 };
 
-JSIL.MakeDelegate("System.Action", true, []);
-JSIL.MakeDelegate("System.Action`1", true, ["in T"]);
-JSIL.MakeDelegate("System.Action`2", true, ["in T1", "in T2"]);
-JSIL.MakeDelegate("System.Action`3", true, ["in T1", "in T2", "in T3"]);
+JSIL.MakeDelegate("System.Action", true, [], JSIL.MethodSignature.Void);
+JSIL.MakeDelegate("System.Action`1", true, ["T"], new JSIL.MethodSignature(null, [new JSIL.GenericParameter("T", "System.Action`1").in()]));
+JSIL.MakeDelegate("System.Action`2", true, ["T1", "T2"], new JSIL.MethodSignature(null, [new JSIL.GenericParameter("T1", "System.Action`2").in(), new JSIL.GenericParameter("T2", "System.Action`2").in()]));
+JSIL.MakeDelegate("System.Action`3", true, ["T1", "T2", "T3"], new JSIL.MethodSignature(null, [
+      new JSIL.GenericParameter("T1", "System.Action`3").in(), new JSIL.GenericParameter("T2", "System.Action`3").in(), 
+      new JSIL.GenericParameter("T3", "System.Action`3").in()
+    ]));
 
-JSIL.MakeDelegate("System.Func`1", true, ["out TResult"]);
-JSIL.MakeDelegate("System.Func`2", true, ["in T", "out TResult"]);
-JSIL.MakeDelegate("System.Func`3", true, ["in T1", "in T2", "out TResult"]);
-JSIL.MakeDelegate("System.Func`4", true, ["in T1", "in T2", "in T3", "out TResult"]);
-
-JSIL.MakeDelegate("System.Predicate`1", true, ["in T"]);
+JSIL.MakeDelegate("System.Func`1", true, ["TResult"], new JSIL.MethodSignature(new JSIL.GenericParameter("TResult", "System.Func`1").out(), null));
+JSIL.MakeDelegate("System.Func`2", true, ["T", "TResult"], new JSIL.MethodSignature(new JSIL.GenericParameter("TResult", "System.Func`2").out(), [new JSIL.GenericParameter("T", "System.Func`2").in()]));
+JSIL.MakeDelegate("System.Func`3", true, ["T1", "T2", "TResult"], new JSIL.MethodSignature(new JSIL.GenericParameter("TResult", "System.Func`3").out(), [new JSIL.GenericParameter("T1", "System.Func`3").in(), new JSIL.GenericParameter("T2", "System.Func`3").in()]));
+JSIL.MakeDelegate("System.Func`4", true, ["T1", "T2", "T3", "TResult"], new JSIL.MethodSignature(new JSIL.GenericParameter("TResult", "System.Func`4").out(), [
+      new JSIL.GenericParameter("T1", "System.Func`4").in(), new JSIL.GenericParameter("T2", "System.Func`4").in(), 
+      new JSIL.GenericParameter("T3", "System.Func`4").in()
+    ]));
+    
+JSIL.MakeDelegate("System.Predicate`1", true, ["in T"], new JSIL.MethodSignature($jsilcore.TypeRef("System.Boolean"), [new JSIL.GenericParameter("T", "System.Predicate`1").in()]));
 
 JSIL.ImplementExternals(
   "System.Exception", function ($) {
@@ -1899,6 +1939,31 @@ JSIL.ImplementExternals("System.Threading.Monitor", function ($) {
 JSIL.MakeStaticClass("System.Threading.Interlocked", true, [], function ($) {
   $.ExternalMethod({Public: true , Static: true }, "CompareExchange", 
     new JSIL.MethodSignature("!!0", [JSIL.Reference.Of("!!0"), "!!0", "!!0"], ["T"])
+  );
+});
+
+JSIL.MakeStaticClass("System.Threading.Volatile", true, [], function ($) {
+  $.ExternalMethod({Public: true , Static: true }, "Read", 
+    new JSIL.MethodSignature("!!0", [$jsilcore.TypeRef("JSIL.Reference", ["!!0"])], ["T"])
+  );
+  $.ExternalMethod({Public: true , Static: true }, "Write", 
+    new JSIL.MethodSignature(null, [$jsilcore.TypeRef("JSIL.Reference", ["!!0"]), "!!0"], ["T"])
+  );  
+});
+
+JSIL.ImplementExternals("System.Threading.Volatile", function ($) {
+  $.Method({Static:true, Public:true }, "Write", 
+    new JSIL.MethodSignature(null, [$jsilcore.TypeRef("JSIL.Reference", ["!!0"]), "!!0"], ["T"]), 
+    function Write (T, /* ref */ location, value) {
+      location.set(JSIL.CloneParameter(T, value));
+    }
+  );
+  
+  $.Method({Static:true, Public:true }, "Read", 
+    new JSIL.MethodSignature("!!0", [$jsilcore.TypeRef("JSIL.Reference", ["!!0"])], ["T"]), 
+    function Read (T, /* ref */ location) {
+      return location.get();
+    }
   );
 });
 
