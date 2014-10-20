@@ -81,6 +81,7 @@
     <None Include="ExpressionTestCases\ExpressionsExecution.cs" />
     <None Include="SimpleTestCases\CharArithmetic_Issue610.cs" />
     <None Include="SimpleTestCasesForStubbedBcl\Issue578.cs" />
+    <None Include="SimpleTestCases\MultipleIndexerAssgments_Issue491.cs" />
     <None Include="SimpleTestCases\GenericClassStaticMethodInvoke.cs" />
     <Compile Include="SimpleTestCases\ReflectionGenericMethodInvoke.cs" />
     <Compile Include="SimpleTests.cs" />
