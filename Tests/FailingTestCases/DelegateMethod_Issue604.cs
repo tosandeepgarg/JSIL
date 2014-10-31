@@ -5,8 +5,8 @@ public static class Program
 {
     public static void Main()
     {
-        Test(new Test());
-        //TestInterface(new Test());
+        //Test(new Test());
+        TestInterface(new Test());
 
         Action a = M1;
         a += M2;
