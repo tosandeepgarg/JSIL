@@ -676,6 +676,13 @@ JSIL.ImplementExternals(
         }
       }
     );
+    
+    $.Method({Static:false , Public:true }, "get_Length", 
+      new JSIL.MethodSignature($.Int32, [], []),
+      function() {
+        return this.length;
+      }
+    );
   }
 );
 

@@ -99,7 +99,7 @@ namespace JSIL.Proxies {
             throw new NotImplementedException();
         }
 
-        [JSChangeName("length")]
+        [JSReplacement("$this.length")]
         [JSAlwaysAccessAsProperty]
         [JSNeverReplace]
         abstract public int Length { get; }
