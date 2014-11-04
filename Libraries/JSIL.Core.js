@@ -4873,7 +4873,20 @@ JSIL.$ActuallyMakeCastMethods = function (publicInterface, typeObject, specialTy
     else
       throwCastError(expression);
   };
-
+  
+  var decimalCastFunction = function Cast_Decimal_Impl (expression) {
+    if (expression === false)
+      return new System.Decimal(0);
+    else if (expression === true)
+      return new System.Decimal(1);
+    else if (typeof (expression) === "number")
+      return new System.Decimal(expression);
+    else if (publicInterface.$Is(expression))
+      return expression;
+    else
+      throwCastError(expression);
+  };
+  
   switch (specialType) {
     case "enum":
       customCheckOnly = true;    
@@ -4986,6 +4999,15 @@ JSIL.$ActuallyMakeCastMethods = function (publicInterface, typeObject, specialTy
         return int64CastFunction(expression);
       };
       break;
+      
+    case "decimal":
+      customCheckOnly = true;
+      asFunction = throwCastError;
+
+      castFunction = function Cast_Decimal (expression) {
+        return decimalCastFunction(expression);
+      };
+      break;  
   }
 
   if (checkMethod && customCheckOnly) {
