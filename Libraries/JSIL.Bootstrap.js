@@ -2277,10 +2277,47 @@ JSIL.MakeStruct("System.ValueType", "System.Decimal", true, [], function ($) {
     (new JSIL.MethodSignature(mscorlib.TypeRef("System.Double"), [$.Type], [])),
     decimalToNumber
   );
+  
+  $.Method({Static:true , Public:true }, "op_GreaterThan", 
+    (new JSIL.MethodSignature($.Boolean, [$.Type, $.Type], [])),
+    function (lhs, rhs) {
+      return decimalToNumber(lhs) > decimalToNumber(rhs);
+    }
+  );
 
+  $.Method({Static:true , Public:true }, "op_LessThan", 
+    (new JSIL.MethodSignature($.Boolean, [$.Type, $.Type], [])),
+    function (lhs, rhs) {
+      return decimalToNumber(lhs) < decimalToNumber(rhs);
+    }
+  );
+ 
+  $.Method({Static:true , Public:true }, "op_GreaterThanOrEqual", 
+    (new JSIL.MethodSignature($.Boolean, [$.Type, $.Type], [])),
+    function (lhs, rhs) {
+      return decimalToNumber(lhs) >= decimalToNumber(rhs);
+    }
+  );
+  
+  $.Method({Static:true , Public:true }, "op_LessThanOrEqual", 
+    (new JSIL.MethodSignature($.Boolean, [$.Type, $.Type], [])),
+    function (lhs, rhs) {
+      return decimalToNumber(lhs) <= decimalToNumber(rhs);
+    }
+  );
+
+  $.Method({Static:true , Public:true }, "op_Implicit", 
+    (new JSIL.MethodSignature($.Type, [mscorlib.TypeRef("System.Int32")], [])),
+    numberToDecimal
+  );
+  
   $.Field({Static: false, Public: false }, "value", mscorlib.TypeRef("System.Double"), function () {
     return 0;
   });
+  
+  JSIL.MakeCastMethods(
+    $.publicInterface, $.typeObject, "decimal"
+  );
 });
 
 JSIL.ImplementExternals("System.Environment", function ($) {
@@ -4020,6 +4057,15 @@ JSIL.ImplementExternals("System.Convert", function ($) {
   var boolToInt = function (b) {
     return b ? 1 : 0;
   };
+  
+  var numToDecimalAdapter = function (adapter) {
+    if (!adapter)
+      JSIL.RuntimeError("No adapter provided");
+      
+    return function(value) {
+      return new System.Decimal(adapter(value))
+    }
+  }
 
   var boolToString = function (b) {
     return b ? "True" : "False";
@@ -4098,18 +4144,6 @@ JSIL.ImplementExternals("System.Convert", function ($) {
         return JSIL.DefaultValue(toType);
       }
       
-      if ($jsilcore.System.IConvertible.$Is(value)) {
-        var conversionMethod = $jsilcore.System.IConvertible["To" + typeName];
-        
-        if (conversionMethod) {
-          return conversionMethod.Call(value, null, null);
-        }
-      }
-      
-      if (to === $.String) {
-        return value.toString();
-      }
-      
       if ($jsilcore.System.String.$Is(value))
         return from.string(value);
       else if (from.int64 && $jsilcore.System.Int64.$Is(value))
@@ -4124,6 +4158,16 @@ JSIL.ImplementExternals("System.Convert", function ($) {
         return from.boolean(value);
       else if ($jsilcore.System.Double.$Is(value))
         return from.float(value);
+      else if ($jsilcore.System.IConvertible.$Is(value)) {
+        var conversionMethod = $jsilcore.System.IConvertible["To" + typeName];
+        
+        if (conversionMethod) {
+          return conversionMethod.Call(value, null, null);
+        }
+      }      
+      else if (to === $.String) {
+        return value.toString();
+      }
       else
         throw new System.NotImplementedException(
           "Conversion from type '" + JSIL.GetType(value) + "' to type '" + typeName + "' not implemented."
@@ -4276,6 +4320,16 @@ JSIL.ImplementExternals("System.Convert", function ($) {
     uint64: returnValueOf,
     string: makeAdapter($jsilcore.$ParseFloat)
   });
+  
+  makeConvertMethods("Decimal", $jsilcore.TypeRef("System.Decimal"), {
+    boolean: numToDecimalAdapter(boolToInt),
+    uint: numToDecimalAdapter(returnSame),
+    int: numToDecimalAdapter(returnSame),
+    float: numToDecimalAdapter(returnSame),
+    int64: numToDecimalAdapter(returnValueOf),
+    uint64: numToDecimalAdapter(returnValueOf),
+    string: numToDecimalAdapter($jsilcore.$ParseFloat)
+  });  
 
   makeConvertMethods("Char", $.Char, {
     uint: intToChar,
