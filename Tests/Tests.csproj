@@ -113,7 +113,9 @@
     <None Include="AnalysisTestCases\Issue371.cs" />
     <None Include="AnalysisTestCases\Issue494.cs" />
     <None Include="AnalysisTestCases\Issue494_2.cs" />
-    <Compile Include="CodeProviders.cs" />
+    <Compile Include="CodeProviders.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="ComparisonTest.cs" />
     <Compile Include="ComparisonTests.cs" />
     <None Include="FailingTestCases\BaseFields.cs" />
@@ -229,6 +231,7 @@
     <None Include="SpecialTestCases\TranslateTypeInStubbedAssembly.cs" />
     <None Include="SpecialTestCases\TranslateMethodInStubbedAssembly.cs" />
     <None Include="SpecialTestCases\TranslateMethodInStubbedType.cs" />
+    <None Include="FailingTestCases\DelegateMethod_Issue604.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />
