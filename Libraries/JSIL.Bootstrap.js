@@ -2290,11 +2290,15 @@ $jsilcore.hashContainerBase = function ($) {
   };
 
   $.RawMethod(false, "$init", function HashContainer_Init () {
-    this.$clear();
+    if (typeof (Map) !== "function")
+      JSIL.RuntimeError("Hash containers require ES6 Map");
+
+    this._dict = new Map();
+    this._count = 0;
   });
 
   $.RawMethod(false, "$clear", function HashContainer_Init () {
-    this._dict = JSIL.CreateDictionaryObject(null);
+    this._dict.clear();
     this._count = 0;
   });
 
@@ -2307,8 +2311,8 @@ $jsilcore.hashContainerBase = function ($) {
 
   $.RawMethod(false, "$searchBucket", function HashContainer_SearchBucket (key) {
     var hashCode = JSIL.ObjectHashCode(key);
-    var bucket = this._dict[hashCode];
-    if (!bucket)
+    var bucket = this._dict.get(hashCode);
+    if (bucket === undefined)
       return null;
 
     for (var i = 0, l = bucket.length; i < l; i++) {
@@ -2323,8 +2327,8 @@ $jsilcore.hashContainerBase = function ($) {
 
   $.RawMethod(false, "$removeByKey", function HashContainer_Remove (key) {
     var hashCode = JSIL.ObjectHashCode(key);
-    var bucket = this._dict[hashCode];
-    if (!bucket)
+    var bucket = this._dict.get(hashCode);
+    if (bucket === undefined)
       return false;
 
     for (var i = 0, l = bucket.length; i < l; i++) {
@@ -2342,13 +2346,21 @@ $jsilcore.hashContainerBase = function ($) {
 
   $.RawMethod(false, "$addToBucket", function HashContainer_Add (key, value) {
     var hashCode = JSIL.ObjectHashCode(key);
-    var bucket = this._dict[hashCode];
-    if (!bucket)
-      this._dict[hashCode] = bucket = [];
+    var bucket = this._dict.get(hashCode);
+    if (bucket === undefined)
+      this._dict.set(hashCode, bucket = []);
 
     bucket.push(new BucketEntry(key, value));
     this._count += 1;
     return value;
+  });
+
+  $.RawMethod(false, "$getCount", function HashContainer_GetCount () {
+    return this._count;
+  });
+
+  $.RawMethod(false, "$getBucketIterator", function HashContainer_GetBucketIterator () {
+    return this._dict.values();
   });
 };
 
@@ -2429,7 +2441,7 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2", function ($) 
   $.Method({Static:false, Public:true }, "get_Count", 
     (new JSIL.MethodSignature($.Int32, [], [])), 
     function get_Count () {
-      return this._count;
+      return this.$getCount();
     }
   );
 
@@ -2959,9 +2971,9 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2+Enumerator", fu
         tKey: tKey,
         tValue: tValue,
         tKvp: tKvp,
-        bucketIndex: 0,
         valueIndex: -1,
-        keys: Object.keys(dictionary._dict),
+        buckets: dictionary.$getBucketIterator(),
+        currentBucket: null,
         current: JSIL.CreateInstanceOfType(tKvp, "_ctor", [JSIL.DefaultValue(tKey), JSIL.DefaultValue(tValue)])
       };
     }
@@ -2986,23 +2998,24 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2+Enumerator", fu
     new JSIL.MethodSignature($.Boolean, [], []), 
     function MoveNext () {
       var state = this.state;
-      var dict = this.dictionary._dict;
-      var keys = state.keys;
       var valueIndex = ++(state.valueIndex);
-      var bucketIndex = state.bucketIndex;
 
-      while ((bucketIndex >= 0) && (bucketIndex < keys.length)) {
-        var bucketKey = keys[state.bucketIndex];
-        var bucket = dict[bucketKey];
+      while (true) {
+        var bucket = state.currentBucket;
 
-        if ((valueIndex >= 0) && (valueIndex < bucket.length)) {
+        if (bucket && (valueIndex >= 0) && (valueIndex < bucket.length)) {
           var current = state.current;
-          current.key = bucket[valueIndex].key;
-          current.value = bucket[valueIndex].value;
+          current.key = bucket[state.valueIndex].key;
+          current.value = bucket[state.valueIndex].value;
           return true;
         } else {
-          bucketIndex = ++(state.bucketIndex);
-          valueIndex = 0;
+          var i = state.buckets.next();
+          if (i.done) {
+            return false;          
+          }
+
+          state.currentBucket = i.value;
+          valueIndex = state.valueIndex = 0;
         }
       }
 
@@ -3021,7 +3034,8 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2+Enumerator", fu
   $.Method({Static:false, Public:false, Virtual:true }, "Reset", 
     JSIL.MethodSignature.Void, 
     function System_Collections_IEnumerator_Reset () {
-      this.state.bucketIndex = 0;
+      this.state.buckets = this.dictionary.$getBucketIterator();
+      this.state.currentBucket = null;
       this.state.valueIndex = -1;
     }
   )
@@ -3047,10 +3061,10 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1+Enumerator", funct
 
       this.state = {
         t: t,
-        bucketIndex: 0,
         valueIndex: -1,
-        keys: Object.keys(hashSet._dict),
-        current: null
+        buckets: hashSet.$getBucketIterator(),
+        currentBucket: null,
+        current: JSIL.DefaultValue(t)
       };
     }
   );
@@ -3074,21 +3088,22 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1+Enumerator", funct
     new JSIL.MethodSignature($.Boolean, [], []), 
     function MoveNext () {
       var state = this.state;
-      var dict = this.hashSet._dict;
-      var keys = state.keys;
       var valueIndex = ++(state.valueIndex);
-      var bucketIndex = state.bucketIndex;
 
-      while ((bucketIndex >= 0) && (bucketIndex < keys.length)) {
-        var bucketKey = keys[state.bucketIndex];
-        var bucket = dict[bucketKey];
+      while (true) {
+        var bucket = state.currentBucket;
 
-        if ((valueIndex >= 0) && (valueIndex < bucket.length)) {
-          state.current = bucket[valueIndex].key;
+        if (bucket && (valueIndex >= 0) && (valueIndex < bucket.length)) {
+          state.current = bucket[state.valueIndex].key;
           return true;
         } else {
-          bucketIndex = ++(state.bucketIndex);
-          valueIndex = 0;
+          var i = state.buckets.next();
+          if (i.done) {
+            return false;          
+          }
+
+          state.currentBucket = i.value;
+          valueIndex = state.valueIndex = 0;
         }
       }
 
@@ -3107,7 +3122,8 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1+Enumerator", funct
   $.Method({Static:false, Public:false, Virtual:true }, "Reset", 
     JSIL.MethodSignature.Void, 
     function System_Collections_IEnumerator_Reset () {
-      this.state.bucketIndex = 0;
+      this.state.buckets = this.hashSet.$getBucketIterator();
+      this.state.currentBucket = null;
       this.state.valueIndex = -1;
     }
   )
@@ -3860,7 +3876,7 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1", function ($) {
   $.Method({Static:false, Public:true }, "get_Count", 
     (new JSIL.MethodSignature($.Int32, [], [])), 
     function get_Count () {
-      return this._count;
+      return this.$getCount();
     }
   );
 
