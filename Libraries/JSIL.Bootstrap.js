@@ -2998,12 +2998,12 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2+Enumerator", fu
     new JSIL.MethodSignature($.Boolean, [], []), 
     function MoveNext () {
       var state = this.state;
-      var valueIndex = ++(state.valueIndex);
+      var valueIndex = ++(state.valueIndex) | 0;
 
       while (true) {
         var bucket = state.currentBucket;
 
-        if (bucket && (valueIndex >= 0) && (valueIndex < bucket.length)) {
+        if (bucket && (valueIndex >= 0) && (valueIndex < state.currentBucketLength)) {
           var current = state.current;
           current.key = bucket[state.valueIndex].key;
           current.value = bucket[state.valueIndex].value;
@@ -3015,6 +3015,7 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2+Enumerator", fu
           }
 
           state.currentBucket = i.value;
+          state.currentBucketLength = state.currentBucket.length;
           valueIndex = state.valueIndex = 0;
         }
       }
@@ -3088,12 +3089,12 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1+Enumerator", funct
     new JSIL.MethodSignature($.Boolean, [], []), 
     function MoveNext () {
       var state = this.state;
-      var valueIndex = ++(state.valueIndex);
+      var valueIndex = ++(state.valueIndex) | 0;
 
       while (true) {
         var bucket = state.currentBucket;
 
-        if (bucket && (valueIndex >= 0) && (valueIndex < bucket.length)) {
+        if (bucket && (valueIndex >= 0) && (valueIndex < state.currentBucketLength)) {
           state.current = bucket[state.valueIndex].key;
           return true;
         } else {
@@ -3103,6 +3104,7 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1+Enumerator", funct
           }
 
           state.currentBucket = i.value;
+          state.currentBucketLength = state.currentBucket.length;
           valueIndex = state.valueIndex = 0;
         }
       }
