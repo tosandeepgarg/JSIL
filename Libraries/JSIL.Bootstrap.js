@@ -2282,12 +2282,21 @@ JSIL.MakeClass($jsilcore.TypeRef("System.Object"), "System.Environment", false, 
 });
 
 $jsilcore.hashContainerBase = function ($) {
-  var mscorlib = JSIL.GetCorlib();
+  var mscorlib = JSIL.GetCorlib();  
 
   var BucketEntry = function (key, value) {
     this.key = key;
     this.value = value;
   };
+
+  $.RawMethod(false, "$init", function HashContainer_Init () {
+    this.$clear();
+  });
+
+  $.RawMethod(false, "$clear", function HashContainer_Init () {
+    this._dict = JSIL.CreateDictionaryObject(null);
+    this._count = 0;
+  });
 
   $.RawMethod(false, "$areEqual", function HashContainer_AreEqual (lhs, rhs) {
     if (lhs === rhs)
@@ -2349,8 +2358,7 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2", function ($) 
   var mscorlib = JSIL.GetCorlib();
 
   function initFields (self) {
-    self._dict = JSIL.CreateDictionaryObject(null);
-    self._count = 0;
+    self.$init();
     self.tKeyCollection = null;
     self.tValueCollection = null;
     self.tKeyEnumerator = null;
@@ -2400,8 +2408,7 @@ JSIL.ImplementExternals("System.Collections.Generic.Dictionary`2", function ($) 
   $.Method({Static:false, Public:true }, "Clear", 
     (JSIL.MethodSignature.Void), 
     function Clear () {
-      this._dict = {}
-      this._count = 0;
+      this.$clear();
     }
   );
 
@@ -3773,8 +3780,7 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1", function ($) {
   $.Method({Static:false, Public:true }, ".ctor", 
     (JSIL.MethodSignature.Void), 
     function _ctor () {
-      this._dict = {};
-      this._count = 0;
+      this.$init();
       this._comparer = null;
       this.tEnumerator = null;
     }
@@ -3783,8 +3789,7 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1", function ($) {
   $.Method({Static:false, Public:true }, ".ctor", 
     (new JSIL.MethodSignature(null, [$jsilcore.TypeRef("System.Collections.Generic.IEqualityComparer`1", [T])], [])), 
     function _ctor (comparer) {
-      this._dict = {};
-      this._count = 0;
+      this.$init();
       this._comparer = comparer;
       this.tEnumerator = null;
     }
@@ -3793,8 +3798,7 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1", function ($) {
   $.Method({Static:false, Public:true }, ".ctor", 
     (new JSIL.MethodSignature(null, [$jsilcore.TypeRef("System.Collections.Generic.IEnumerable`1", [T])], [])), 
     function _ctor (collection) {
-      this._dict = {};
-      this._count = 0;
+      this.$init();
       this._comparer = null;
       this.$addRange(collection);
       this.tEnumerator = null;
@@ -3804,8 +3808,7 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1", function ($) {
   $.Method({Static:false, Public:true }, ".ctor", 
     (new JSIL.MethodSignature(null, [$jsilcore.TypeRef("System.Collections.Generic.IEnumerable`1", [T]), $jsilcore.TypeRef("System.Collections.Generic.IEqualityComparer`1", [new JSIL.GenericParameter("T", "System.Collections.Generic.HashSet`1")])], [])), 
     function _ctor (collection, comparer) {
-      this._dict = {};
-      this._count = 0;
+      this.$init();
       this._comparer = comparer;
       this.$addRange(collection);
       this.tEnumerator = null;
@@ -3843,8 +3846,7 @@ JSIL.ImplementExternals("System.Collections.Generic.HashSet`1", function ($) {
   $.Method({Static:false, Public:true }, "Clear", 
     (JSIL.MethodSignature.Void), 
     function Clear () {
-      this._dict = {};
-      this._count = 0;
+      this.$clear();
     }
   );
 

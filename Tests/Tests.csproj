@@ -231,6 +231,7 @@
     <None Include="SpecialTestCases\TranslateTypeInStubbedAssembly.cs" />
     <None Include="SpecialTestCases\TranslateMethodInStubbedAssembly.cs" />
     <None Include="SpecialTestCases\TranslateMethodInStubbedType.cs" />
+    <None Include="PerformanceTestCases\HashSet.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />
