@@ -84,8 +84,9 @@
     <None Include="SimpleTestCases\CharArithmetic_Issue610.cs" />
     <None Include="SimpleTestCasesForStubbedBcl\Issue578.cs" />
     <None Include="SimpleTestCases\ReadOnlyPropretiesInitiallizer_Issue619.cs" />
-    <None Include="SimpleTestCases\MultipleIndexerAssgments_Issue491.cs" />
     <None Include="SimpleTestCases\GenericClassStaticMethodInvoke.cs" />
+    <None Include="SimpleTestCases\Issue631.cs" />
+    <None Include="SimpleTestCases\Issue555.cs" />
     <None Include="SimpleTestCases\Issue478.cs" />
     <None Include="SimpleTestCases\Issue560.cs" />
     <None Include="SimpleTestCases\Issue491.cs" />
