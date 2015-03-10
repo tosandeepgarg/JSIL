@@ -60,9 +60,17 @@ namespace JSIL.Transforms {
             if ((source == null) || (source.IsNull))
                 return false;
 
-            // Can't eliminate struct temporaries, since that might eliminate some implied copies.
-            if (TypeUtil.IsStruct(target.IdentifierType))
-                return false;
+            // HACK: Can't eliminate struct temporaries, since that might eliminate some implied copies.
+            if (TypeUtil.IsStruct(target.IdentifierType)) {
+                // HACK: Allow optimizing out default(T) for structs,
+                //  but only if they're referred to once.
+                if (source is JSDefaultValueLiteral) {
+                    var numUsages = FirstPass.Accesses.Where(a => a.Source == target.Identifier).Count();
+                    return numUsages <= 1;
+                } else {
+                    return false;
+                }
+            }
 
             // Handle special cases where our interpretation of 'constant' needs to be more flexible
             {
@@ -274,6 +282,14 @@ namespace JSIL.Transforms {
             return true;
         }
 
+        private bool CanSkipUsageVeto (JSExpression replacement) {
+            return 
+                (replacement is JSLiteral) && 
+                // Usage count veto is important for struct literals since they can be mutated
+                //  after-the-fact
+                !TypeUtil.IsStruct(replacement.GetActualType(TypeSystem));
+        }
+
         public void VisitNode (JSFunctionExpression fn) {
             FirstPass = GetFirstPass(fn.Method.QualifiedIdentifier);
             if (FirstPass == null)
@@ -367,7 +383,7 @@ namespace JSIL.Transforms {
                 if (
                     (copies.Length + accesses.Length) > 1
                 ) {
-                    if (replacement is JSLiteral) {
+                    if (CanSkipUsageVeto(replacement)) {
                         if (TraceLevel >= 5)
                             Console.WriteLine("Skipping veto of elimination for {0} because it is a literal.", v);
                     } else {

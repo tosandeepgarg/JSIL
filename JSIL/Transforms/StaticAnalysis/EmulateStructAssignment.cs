@@ -14,9 +14,9 @@ using Mono.Cecil;
 
 namespace JSIL.Transforms {
     public class EmulateStructAssignment : StaticAnalysisJSAstVisitor {
-        public const bool TraceElidedCopies = false;
-        public const bool TraceInsertedCopies = false;
-        public const bool TracePostOptimizedCopies = false;
+        public const bool TraceElidedCopies          = false;
+        public const bool TraceInsertedCopies        = false;
+        public const bool TracePostOptimizedCopies   = false;
         public const bool TracePostOptimizeDecisions = false;
 
         public readonly TypeInfoProvider TypeInfo;
@@ -157,16 +157,13 @@ namespace JSIL.Transforms {
             if (IsTypeExcludedFromCopies(valueType)) 
                 return false;
 
-            var iae = value as JSInitializerApplicationExpression;
-
             if (
                 (value is JSLiteral) ||
                 (value is JSNewExpression) ||
                 (value is JSPassByReferenceExpression) ||
                 (value is JSNewBoxedVariable) ||
                 (value is JSDefaultValueLiteral) ||
-                (value is JSFieldOfExpression) ||
-                ((iae != null) && ((iae.Target is JSNewExpression) || (iae.Target is JSDefaultValueLiteral)))
+                (value is JSFieldOfExpression)
             ) {
                 return false;
             }
@@ -221,6 +218,10 @@ namespace JSIL.Transforms {
             if (valueType.FullName == "System.Decimal")
                 return true;
 
+            // HACK: Never copy references to structs
+            if (valueType.IsByReference)
+                return true;
+
             return false;
         }
 
@@ -269,7 +270,7 @@ namespace JSIL.Transforms {
 
             if (!result) {
                 if (TraceElidedCopies)
-                    Console.WriteLine("argument {0} needs no copy because it isn't modified and doesn't escape");
+                    Console.WriteLine("argument {0} ('{1}') needs no copy because it isn't modified and doesn't escape", expression, parameterName);
             }
 
             return result;
@@ -454,6 +455,33 @@ namespace JSIL.Transforms {
             VisitChildren(invocation);
         }
 
+        private bool IsVarEffectivelyConstantHere (JSVariable variable) {
+            if (variable == null)
+                return false;
+            if (variable.IsParameter)
+                return false;
+
+            // If we're making a copy of a local variable, and this is the last reference to 
+            //  the variable, we can eliminate the copy.
+            if (
+                !SecondPass.Data.VariablesPassedByRef.Contains(variable.Identifier) &&
+
+                SecondPass.Data.Accesses
+                    .Where(a => a.Source == variable.Identifier)
+                    // FIXME: This should probably be NodeIndex but that gets out of sync somehow? Outdated analysis data?
+                    .All(a => a.StatementIndex <= StatementIndex) &&
+
+                SecondPass.Data.Assignments
+                    .Where(a => a.Target == variable.Identifier)
+                    // FIXME: This should probably be NodeIndex but that gets out of sync somehow? Outdated analysis data?
+                    .All(a => a.StatementIndex < StatementIndex)
+            ) {
+                return true;
+            }
+
+            return false;
+        }
+
         public void VisitNode (JSBinaryOperatorExpression boe) {
             if (boe.Operator != JSOperator.Assignment) {
                 base.VisitNode(boe);
@@ -473,22 +501,30 @@ namespace JSIL.Transforms {
                 var rightVarsModified = (rightVars.Any((rv) => SecondPass.IsVariableModified(rv.Name)));
                 var rightVarsAreReferences = rightVars.Any((rv) => rv.IsReference);
 
+                bool rightVarIsEffectivelyConstantHere = 
+                    IsVarEffectivelyConstantHere(boe.Right as JSVariable);
+
                 if (
                     (
                         rightVarsModified || 
                         IsCopyNeededForAssignmentTarget(boe.Left) || 
                         rightVarsAreReferences
                     ) &&
-                    !IsCopyAlwaysUnnecessaryForAssignmentTarget(boe.Left)
+                    !IsCopyAlwaysUnnecessaryForAssignmentTarget(boe.Left) &&
+                    !rightVarIsEffectivelyConstantHere
                 ) {
                     if (TraceInsertedCopies)
-                        Console.WriteLine(String.Format("struct copy introduced for assignment {0} = {1}", boe.Left, boe.Right));
+                        Console.WriteLine("struct copy introduced for assignment {0} = {1}", boe.Left, boe.Right);
 
                     doPostOptimization = true;
                     boe.Right = MakeCopyForExpression(boe.Right, relevantParameter);
                 } else {
-                    if (TraceElidedCopies)
-                        Console.WriteLine(String.Format("struct copy elided for assignment {0} = {1}", boe.Left, boe.Right));
+                    if (TraceElidedCopies) {
+                        Console.WriteLine(
+                            "struct copy elided for assignment {0} = {1}{2}", boe.Left, boe.Right,
+                            rightVarIsEffectivelyConstantHere ? " (rhs is effectively constant due to following all other accesses)" : ""
+                        );
+                    }
                 }
             } else {
                 if (TraceElidedCopies && TypeUtil.IsStruct(boe.Right.GetActualType(TypeSystem)))
@@ -643,14 +679,22 @@ namespace JSIL.Transforms {
                 IsStructOrGenericParameter(rightType) &&
                 IsCopyNeeded(wtre.Right, out relevantParameter)
             ) {
-                if (TraceInsertedCopies)
-                    Console.WriteLine(String.Format("struct copy introduced for write-through-reference rhs {0}", wtre));
+                bool rightVarIsEffectivelyConstantHere =
+                    IsVarEffectivelyConstantHere(wtre.Right as JSVariable);
 
-                var replacement = new JSWriteThroughReferenceExpression(
-                    (JSVariable)wtre.Left, MakeCopyForExpression(wtre.Right, relevantParameter)
-                );
-                ParentNode.ReplaceChild(wtre, replacement);
-                VisitReplacement(replacement);
+                if (rightVarIsEffectivelyConstantHere) {
+                    if (TraceElidedCopies)
+                        Console.WriteLine("struct copy elided for write-through-reference rhs {0} (rhs is effectively constant)", wtre);
+                } else {
+                    if (TraceInsertedCopies)
+                        Console.WriteLine("struct copy introduced for write-through-reference rhs {0}", wtre);
+
+                    var replacement = new JSWriteThroughReferenceExpression(
+                        (JSVariable)wtre.Left, MakeCopyForExpression(wtre.Right, relevantParameter)
+                    );
+                    ParentNode.ReplaceChild(wtre, replacement);
+                    VisitReplacement(replacement);
+                }
             } else {
                 VisitChildren(wtre);
             }

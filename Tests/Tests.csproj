@@ -14,6 +14,8 @@
     <FileAlignment>512</FileAlignment>
     <OutputPath>..\bin\</OutputPath>
     <PlatformTarget>x86</PlatformTarget>
+    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
+    <RestorePackages>true</RestorePackages>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <DebugSymbols>true</DebugSymbols>
@@ -50,7 +52,14 @@
     <CodeAnalysisIgnoreBuiltInRules>true</CodeAnalysisIgnoreBuiltInRules>
     <CodeAnalysisFailOnMissingRules>true</CodeAnalysisFailOnMissingRules>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|.NET 4.5 x86'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
   <ItemGroup>
+    <Reference Include="FSharp.Compiler.CodeDom, Version=0.9.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\FSharp.Compiler.CodeDom.0.9.1\lib\net40\FSharp.Compiler.CodeDom.dll</HintPath>
+    </Reference>
     <Reference Include="nunit.framework">
       <HintPath>..\Upstream\nunit.framework.dll</HintPath>
     </Reference>
@@ -60,12 +69,6 @@
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Xml" />
-    <Reference Include="FSharp.Compiler.CodeDom, Version=2.0.0.0, Culture=neutral, PublicKeyToken=a19089b1c74d0809">
-      <HintPath>..\Upstream\FSharp\FSharp.Compiler.CodeDom.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.Core, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <HintPath>..\Upstream\FSharp\FSharp.Core.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <None Include="AnalysisTestCases\ReturnStructArgument.cs" />
@@ -76,7 +79,7 @@
     <None Include="AnalysisTestCases\ReturnMutatedStructArgument.cs" />
     <None Include="AnalysisTestCases\ReturnMutatedNestedStruct.cs" />
     <None Include="AnalysisTestCases\MutateNestedStruct.cs" />
-    <None Include="AnalysisTestCases\CopyGetEnumerator.cs" />
+    <None Include="AnalysisTestCases\Issue667.cs" />
     <None Include="AnalysisTestCases\NestedReturnNew.cs" />
     <None Include="AnalysisTestCases\StructTemporaries.cs" />
     <None Include="AnalysisTestCases\LocalCopyOfGlobal.cs" />
@@ -113,6 +116,38 @@
     <None Include="AnalysisTestCases\Issue371.cs" />
     <None Include="AnalysisTestCases\Issue494.cs" />
     <None Include="AnalysisTestCases\Issue494_2.cs" />
+    <None Include="AnalysisTestCases\CopyGetEnumerator.cs" />
+    <None Include="EmscriptenTestCases\OutIntParameter.cs" />
+    <None Include="EmscriptenTestCases\RefIntParameter.cs" />
+    <None Include="EmscriptenTestCases\OutStructParameter.cs" />
+    <None Include="EmscriptenTestCases\ByValueStructParameter.cs" />
+    <None Include="EmscriptenTestCases\ByValueStructResult.cs" />
+    <None Include="EmscriptenTestCases\MutateStringArgument.cs" />
+    <None Include="EmscriptenTestCases\CopyStringArgument.cs" />
+    <None Include="EmscriptenTestCases\IntPtrRoundTrip.cs" />
+    <None Include="EmscriptenTestCases\PinnedStringBuffer.cs" />
+    <None Include="EmscriptenTestCases\ReturnFunctionPointer.cs" />
+    <None Include="EmscriptenTestCases\IntParameter.cs" />
+    <None Include="EmscriptenTestCases\PassFunctionPointer.cs" />
+    <None Include="EmscriptenTestCases\PassDelegate.cs" />
+    <None Include="EmscriptenTestCases\PassFunctionPointerForDelegate.cs" />
+    <None Include="EmscriptenTestCases\ReturnDelegate.cs" />
+    <None Include="EmscriptenTestCases\WrongDllName.cs" />
+    <None Include="EmscriptenTestCases\AlternateEntryPoint.cs" />
+    <None Include="EmscriptenTestCases\WrongEntryPoint.cs" />
+    <None Include="EmscriptenTestCases\PassDelegateInStruct.cs" />
+    <None Include="EmscriptenTestCases\PassFlagsInStruct.cs" />
+    <None Include="EmscriptenTestCases\OutUshortArrayParameter.cs" />
+    <None Include="EmscriptenTestCases\ByValueStructParameter_Small.cs" />
+    <None Include="EmscriptenTestCases\PassIntPtrInStruct.cs" />
+    <None Include="EmscriptenTestCases\StructAlignment.cs" />
+    <None Include="EmscriptenTestCases\CustomStringMarshaler.cs" />
+    <None Include="EmscriptenTestCases\GetDelegateForFunctionPointer.cs" />
+    <None Include="EmscriptenTestCases\StaticStringFromIntPtr.cs" />
+    <None Include="EmscriptenTestCases\OutStructArrayParameter.cs" />
+    <Compile Include="EmscriptenTestCases\ProxiedExternFunction.cs" />
+    <None Include="EmscriptenTestCases\IntPtrZeroEquality.cs" />
+    <Compile Include="EmscriptenTests.cs" />
     <Compile Include="CodeProviders.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -216,6 +251,7 @@
     <None Include="ReflectionTestCases\GetParameterAttributes.cs" />
     <None Include="ReflectionTestCases\GetConstructorAttributes.cs" />
     <None Include="SpecialTestCases\JSReplacementTypeofThisStatic.cs" />
+    <None Include="EmscriptenTestCases\common\common.cpp" />
     <Content Include="JSTestCases\SameNameDifferentReturnTypes.js" />
     <Content Include="JSTestCases\SameNameWithOverride.js" />
     <None Include="AnalysisTestCases\Issue395.cs" />
@@ -395,6 +431,7 @@
     <None Include="UnsafeTestCases\PackedStructArrayNew.cs" />
     <None Include="UnsafeTestCases\CastAddressOfValueToArray.cs" />
     <None Include="UnsafeTestCases\IgnorePointerFields.cs" />
+    <None Include="UnsafeTestCases\PointerWriteConversion_Issue686.cs" />
     <Compile Include="XMLTests.cs" />
     <Compile Include="DependencyTests.cs" />
     <None Include="TestCases\GenericParameterNameShadowing.cs" />
@@ -640,6 +677,9 @@
   <ItemGroup>
     <Content Include="BinaryTestCases\InheritedAndExplicitOverwrittenMethods.dll" />
     <Content Include="BinaryTestCases\InheritedInterfacesExplicit.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
   </ItemGroup>
   <Import Project="..\.NET 4.5.targets" />
 </Project>

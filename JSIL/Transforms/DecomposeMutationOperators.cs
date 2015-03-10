@@ -75,6 +75,8 @@ namespace JSIL.Transforms {
                 MakeLhsForAssignment(expressionToMutate), newValue, type
             );
 
+            assignment = ConvertReadExpressionToWriteExpression(assignment, TypeSystem);
+
             return assignment;
         }
 
@@ -141,6 +143,17 @@ namespace JSIL.Transforms {
                 ParentNode.ReplaceChild(boe, replacement);
                 VisitReplacement(replacement);
                 return;
+            }
+
+            if (boe.Operator == JSOperator.Assignment)
+            {
+                replacement = ConvertReadExpressionToWriteExpression(boe, TypeSystem);
+                if (replacement != boe)
+                {
+                    ParentNode.ReplaceChild(boe, replacement);
+                    VisitReplacement(replacement);
+                    return;
+                }
             }
 
             VisitChildren(boe);

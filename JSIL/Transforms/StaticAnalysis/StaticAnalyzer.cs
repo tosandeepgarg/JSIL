@@ -96,6 +96,21 @@ namespace JSIL.Transforms {
         }
 
         public void VisitNode (JSFunctionExpression fn) {
+            // Generate synthetic assignments for each parameter so that static analysis doesn't think
+            //  that they are written to zero times (the correct answer is one)
+            foreach (var parameter in fn.Parameters) {
+                State.Assignments.Add(new FunctionAnalysis1stPass.Assignment(
+                    GetParentNodeIndices(),
+                    StatementIndex, NodeIndex, 
+                    parameter.Name,
+                    // FIXME: Should this be a null expression or something instead?
+                    parameter,
+                    JSOperator.Assignment,
+                    parameter.GetActualType(TypeSystem),
+                    parameter.GetActualType(TypeSystem)
+                ));
+            }
+
             VisitChildren(fn);
         }
 
@@ -326,9 +341,15 @@ namespace JSIL.Transforms {
                     }
                 }
 
+                var pni = GetParentNodeIndices();
+
                 foreach (var variable in variables.Values) {
                     ModifiedVariable(variable);
                     State.EscapingVariables.Add(variable.Name);
+
+                    State.Accesses.Add(new FunctionAnalysis1stPass.Access(
+                        pni, StatementIndex, NodeIndex, variable.Name, false
+                    ));
                 }
             }
 
@@ -376,9 +397,22 @@ namespace JSIL.Transforms {
             var method = ie.JSMethod;
 
             if (thisVar != null) {
+                var pni = GetParentNodeIndices();
                 State.Invocations.Add(new FunctionAnalysis1stPass.Invocation(
-                    GetParentNodeIndices(), StatementIndex, NodeIndex, thisVar, method, ie.Method, variables
+                    pni, StatementIndex, NodeIndex, thisVar, method, ie.Method, variables
                 ));
+
+                // HACK: Synthesize an assignment record for direct invocations of constructors on struct locals
+                if ((method) != null && (method.Method.Name == ".ctor")) {
+                    var t = thisVar.GetActualType(TypeSystem);
+                    var synthesizedAssignment = new FunctionAnalysis1stPass.Assignment(
+                        pni, StatementIndex, NodeIndex, thisVar.Name,
+                        new JSNewExpression(t, method.Reference, method.Method, ie.Arguments.ToArray()),
+                        JSOperator.Assignment,
+                        t, t
+                    );
+                    State.Assignments.Add(synthesizedAssignment);
+                }
             } else {
                 State.Invocations.Add(new FunctionAnalysis1stPass.Invocation(
                     GetParentNodeIndices(), StatementIndex, NodeIndex, type, method, ie.Method, variables
@@ -703,8 +737,8 @@ namespace JSIL.Transforms {
 
     public class FunctionAnalysis2ndPass {
         public const bool TraceModifications = false;
-        public const bool TraceEscapes = false;
-        public const bool Tracing = false;
+        public const bool TraceEscapes       = false;
+        public const bool Tracing            = false;
 
         protected readonly bool _IsPure;
         protected bool? _CachedIsPure;

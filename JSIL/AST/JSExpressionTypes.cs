@@ -1185,7 +1185,21 @@ namespace JSIL.Ast {
             ExplicitThis = explicitThis;
             ConstantIfArgumentsAre = constantIfArgumentsAre;
             SuppressThisClone = suppressThisClone;
-                }
+        }
+
+        public JSInvocationExpression FilterArguments (Func<int, JSExpression, JSExpression> filter) {
+            var newThis = filter(-1, ThisReference);
+
+            var newArguments = new JSExpression[Arguments.Count];
+            for (var i = 0; i < newArguments.Length; i++)
+                newArguments[i] = filter(i, Arguments[i]);
+
+            return new JSInvocationExpression(
+                Type, Method, newThis, 
+                newArguments, 
+                ExplicitThis, ConstantIfArgumentsAre, SuppressThisClone
+            );
+        }
 
         public static JSInvocationExpression InvokeMethod (TypeReference type, JSIdentifier method, JSExpression thisReference, JSExpression[] arguments = null, bool constantIfArgumentsAre = false, bool suppressThisClone = false) {
             return InvokeMethod(new JSType(type), method, thisReference, arguments, constantIfArgumentsAre, suppressThisClone);
@@ -1468,62 +1482,6 @@ namespace JSIL.Ast {
                 Delegate,
                 String.Join(", ", (from a in Arguments select String.Concat(a)).ToArray())
             );
-        }
-    }
-
-    public class JSInitializerApplicationExpression : JSExpression {
-        public JSInitializerApplicationExpression (JSExpression target, JSExpression initializer)
-            : base(target, initializer) {
-        }
-
-        public JSExpression Target {
-            get {
-                return Values[0];
-            }
-        }
-
-        public JSExpression Initializer {
-            get {
-                return Values[1];
-            }
-        }
-
-        public override bool IsConstant {
-            get {
-                return Target.IsConstant && Initializer.IsConstant;
-            }
-        }
-
-        public override TypeReference GetActualType (TypeSystem typeSystem) {
-            return Target.GetActualType(typeSystem);
-        }
-    }
-
-    public class JSNestedObjectInitializerExpression : JSExpression {
-        public JSNestedObjectInitializerExpression (JSExpression newInstance, JSExpression initializer)
-            : base(newInstance, initializer) {
-        }
-
-        public JSExpression NewInstance {
-            get {
-                return Values[0];
-            }
-        }
-
-        public JSExpression Initializer {
-            get {
-                return Values[1];
-            }
-        }
-
-        public override bool IsConstant {
-            get {
-                return NewInstance.IsConstant && Initializer.IsConstant;
-            }
-        }
-
-        public override TypeReference GetActualType (TypeSystem typeSystem) {
-            return NewInstance.GetActualType(typeSystem);
         }
     }
 
@@ -3148,6 +3106,38 @@ namespace JSIL.Ast {
         public override TypeReference GetActualType(TypeSystem typeSystem)
         {
             return typeSystem.Object;
+        }
+    }
+
+    public class JSPropertySetterInvocation : JSExpression {
+        public JSPropertySetterInvocation (JSInvocationExpression invocation)
+            : base (invocation) {
+        }
+
+        public JSInvocationExpression Invocation {
+            get {
+                return (JSInvocationExpression)Values[0];
+            }
+        }
+
+        public JSExpression Value {
+            get {
+                return Invocation.Arguments.Last();
+            }
+        }
+
+        public override TypeReference GetActualType (TypeSystem typeSystem) {
+            return Invocation.Parameters.Last().Key.ParameterType;
+        }
+
+        public override bool IsConstant {
+            get {
+                return Value.IsConstant;
+            }
+        }
+
+        public override string ToString () {
+            return "((" + Invocation.ToString() + "))";
         }
     }
 }

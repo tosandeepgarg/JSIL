@@ -792,11 +792,21 @@ namespace JSIL {
         }
 
         public void VisitNode (JSStructCopyExpression sce) {
-            Visit(sce.Struct);
-            Output.Dot();
-            Output.Identifier("MemberwiseClone");
-            Output.LPar();
-            Output.RPar();
+            // HACK: Arithmetic can produce values of implicit type IntPtr. Gross.
+            if (
+                sce.GetActualType(TypeSystem).Name.EndsWith("IntPtr") &&
+                sce.AllChildrenRecursive.All(
+                    n => (n is JSOperatorExpressionBase) || (n is JSLiteral)
+                )
+            ) {
+                Visit(sce.Struct);
+            } else {
+                Visit(sce.Struct);
+                Output.Dot();
+                Output.Identifier("MemberwiseClone");
+                Output.LPar();
+                Output.RPar();
+            }
         }
 
         public void VisitNode (JSConditionalStructCopyExpression sce) {
@@ -1031,6 +1041,8 @@ namespace JSIL {
                 CommaSeparatedList(args);
             }
             Output.RPar();
+            Output.Dot();
+            Output.WriteRaw("LValue");
         }
 
         public void VisitNode (JSIgnoredTypeReference itr) {
@@ -1052,7 +1064,10 @@ namespace JSIL {
                 } else {
                     Output.WriteRaw("0");
                 }
-            } else if (TypeUtil.IsIntegralOrEnum(defaultValue.Value)) {
+            } else if (
+                TypeUtil.IsIntegralOrEnum(defaultValue.Value) &&
+                (defaultValue.Value.FullName != "System.IntPtr")
+            ) {
                 Output.Value(0);
             } else if (TypeUtil.IsNullable(defaultValue.Value)) {
                 Output.WriteRaw("null");
@@ -2164,6 +2179,10 @@ namespace JSIL {
             return false;
         }
 
+        public void VisitNode (JSPropertySetterInvocation psi) {
+            Visit(psi.Invocation);
+        }
+
         public void VisitNode (JSInvocationExpression invocation) {
             var jsm = invocation.JSMethod;
             MethodInfo method = null;
@@ -2377,26 +2396,6 @@ namespace JSIL {
             } finally {
                 ReferenceContext.Pop();
             }
-        }
-
-        public void VisitNode (JSInitializerApplicationExpression iae) {
-            Output.LPar();
-            Visit(iae.Target);
-            Output.RPar();
-            Output.Dot();
-            Output.Identifier("__Initialize__");
-            Output.LPar();
-            Visit(iae.Initializer);
-            Output.RPar();
-        }
-
-        public void VisitNode (JSNestedObjectInitializerExpression noie) {
-            Output.WriteRaw("new JSIL.ObjectInitializer");
-            Output.LPar();
-            Visit(noie.NewInstance);
-            Output.Comma();
-            Visit(noie.Initializer);
-            Output.RPar();
         }
 
         public void VisitNode (JSCommaExpression comma) {

@@ -88,8 +88,12 @@ namespace JSIL {
         public event LoadErrorHandler CouldNotLoadSymbols;
         public event LoadErrorHandler CouldNotResolveAssembly;
         public event LoadErrorHandler CouldNotDecompileMethod;
+        
         public event Action<string> Warning;
         public event Action<string, string[]> IgnoredMethod;
+
+        public event Action<TypeIdentifier> ProxyNotMatched;
+        public event Action<QualifiedMemberIdentifier> ProxyMemberNotMatched;
 
         public event Action<AssemblyDefinition[]> AssembliesLoaded;
         public event Action AnalyzeStarted;
@@ -404,7 +408,8 @@ namespace JSIL {
                     LockStatement = false,
                     FullyQualifyAmbiguousTypeNames = true,
                     ForEachStatement = false,
-                    ExpressionTrees = false
+                    ExpressionTrees = false,
+                    ObjectOrCollectionInitializers = false
                 }
             };
         }
@@ -517,7 +522,7 @@ namespace JSIL {
                         var context = MakeDecompilerContext(assembly.MainModule);
 
                         try {
-                            Translate(context, assembly, outputStream);
+                            TranslateSingleAssemblyInternal(context, assembly, outputStream);
                         } catch (Exception exc) {
                             throw new Exception("Error occurred while generating javascript for assembly '" + assembly.FullName + "'.", exc);
                         }
@@ -555,7 +560,75 @@ namespace JSIL {
 
             pr.OnFinished();
 
+            DoProxyDiagnostics();
+
             return result;
+        }
+
+        private void DoProxyDiagnostics () {
+            if ((ProxyNotMatched == null) && (ProxyMemberNotMatched == null))
+                return;
+
+            var methodsToSkip = new HashSet<MemberIdentifier>(new MemberIdentifier.Comparer(_TypeInfoProvider));
+
+            foreach (var p in _TypeInfoProvider.Proxies) {
+                var ti = new TypeIdentifier(p.Definition);
+
+                if ((p.UsageCount == 0) && (ProxyNotMatched != null)) {
+                    ProxyNotMatched(ti);
+                    continue;
+                }
+
+                // If they explicitly disabled replacement for the type, none of the members got replaced
+                if (p.MemberPolicy == Proxy.JSProxyMemberPolicy.ReplaceNone)
+                    continue;
+
+                if (ProxyMemberNotMatched != null) {
+                    methodsToSkip.Clear();
+
+                    foreach (var kvp in p.Properties) {
+                        if (kvp.Value.CustomAttributes.Any(ca => ca.AttributeType.FullName == "JSIL.Proxy.JSNeverReplace")) {
+                            var mi = kvp.Key;
+
+                            if (kvp.Value.GetMethod != null)
+                                methodsToSkip.Add(mi.Getter);
+
+                            if (kvp.Value.SetMethod != null)
+                                methodsToSkip.Add(mi.Setter);
+
+                            continue;
+                        }
+                    }
+
+                    foreach (var kvp in p.Methods) {
+                        if (methodsToSkip.Contains(kvp.Key))
+                            continue;
+
+                        var identifier = kvp.Key;
+
+                        // Don't log warnings on failed 0-arg default ctor replacement.
+                        // Very often this just means the 0-arg ctor the compiler synthesized for the proxy didn't replace anything.
+                        if (
+                            (identifier.Name == ".ctor") && 
+                            (
+                                (identifier.ParameterTypes == null) || (identifier.ParameterTypes.Length == 0)
+                            )
+                        )
+                            continue;
+
+                        bool used;
+                        p.MemberReplacedTable.TryGetValue(identifier, out used);
+
+                        if (!used) {
+                            // Member was explicitly marked as neverreplace, so of course it didn't replace anything
+                            if (kvp.Value.CustomAttributes.Any(ca => ca.AttributeType.FullName == "JSIL.Proxy.JSNeverReplace"))
+                                continue;
+
+                            ProxyMemberNotMatched(new QualifiedMemberIdentifier(ti, identifier));
+                        }
+                    }
+                }
+            }
         }
 
         private void TriggerAutomaticGC () {
@@ -571,6 +644,7 @@ namespace JSIL {
             using (var ms = new MemoryStream())
             using (var tw = new StreamWriter(ms, new UTF8Encoding(false))) {
                 tw.WriteLine("// {0} {1}", GetHeaderText(), Environment.NewLine);
+                tw.WriteLine("'use strict';");
 
                 foreach (var kvp in manifest.Entries) {
                     tw.WriteLine(
@@ -758,12 +832,13 @@ namespace JSIL {
                         }
 
                         foreach (var m in methods) {
-                            if (!m.HasBody)
-                                continue;
-
                             var mi = _TypeInfoProvider.GetMethod(m);
 
                             if ((mi == null) || (mi.IsIgnored))
+                                continue;
+
+                            // A pinvoke method with no body can be replaced by a proxy method body
+                            if (!m.HasBody && !mi.IsFromProxy)
                                 continue;
 
                             if (isStubbed && !mi.IsUnstubbable) {
@@ -804,7 +879,7 @@ namespace JSIL {
             );
         }
 
-        protected void Translate (DecompilerContext context, AssemblyDefinition assembly, Stream outputStream) {
+        protected void TranslateSingleAssemblyInternal (DecompilerContext context, AssemblyDefinition assembly, Stream outputStream) {
             bool stubbed = IsStubbed(assembly);
 
             var tw = new StreamWriter(outputStream, Encoding.ASCII);
@@ -813,6 +888,9 @@ namespace JSIL {
             );
 
             formatter.Comment(GetHeaderText());
+            formatter.NewLine();
+
+            formatter.WriteRaw("'use strict';");
             formatter.NewLine();
 
             if (stubbed) {
@@ -1030,47 +1108,57 @@ namespace JSIL {
             );
         }
 
-        protected void TranslateEnum (DecompilerContext context, JavascriptFormatter output, TypeDefinition enm) {
-            var typeInfo = _TypeInfoProvider.GetTypeInformation(enm);
-
-            output.Identifier("JSIL.MakeEnum", EscapingMode.None);
-            output.LPar();
-            output.NewLine();
-
-            output.Value(Util.DemangleCecilTypeName(typeInfo.FullName));
-            output.Comma();
-
-            output.Value(enm.IsPublic);
-            output.Comma();
-
-            output.OpenBrace();
-
+        protected void TranslateEnum (DecompilerContext context, JavascriptFormatter output, TypeDefinition enm, JavascriptAstEmitter astEmitter) {
             var typeInformation = _TypeInfoProvider.GetTypeInformation(enm);
+
             if (typeInformation == null)
                 throw new InvalidDataException(String.Format(
                     "No type information for enum '{0}'!",
                     enm.FullName
                 ));
 
-            bool isFirst = true;
-            foreach (var em in typeInformation.EnumMembers.Values.OrderBy((em) => em.Value)) {
-                if (!isFirst) {
-                    output.Comma();
-                    output.NewLine();
-                }
+            output.Identifier("JSIL.MakeEnum", EscapingMode.None);
+            output.LPar();
+            output.NewLine();
 
+            output.OpenBrace();
+
+            output.WriteRaw("FullName: ");
+            output.Value(Util.DemangleCecilTypeName(typeInformation.FullName));
+            output.Comma();
+            output.NewLine();
+
+            output.WriteRaw("BaseType: ");
+            // FIXME: Will this work on Mono?
+            output.TypeReference(enm.Fields.First(f => f.Name == "value__").FieldType, astEmitter.ReferenceContext);
+            output.Comma();
+            output.NewLine();
+
+            output.WriteRaw("IsPublic: ");
+            output.Value(enm.IsPublic);
+            output.Comma();
+            output.NewLine();
+
+            output.WriteRaw("IsFlags: ");
+            output.Value(typeInformation.IsFlagsEnum);
+            output.Comma();
+            output.NewLine();
+
+            output.CloseBrace(false);
+            output.Comma();
+            output.NewLine();
+
+            output.OpenBrace();
+
+            foreach (var em in typeInformation.EnumMembers.Values.OrderBy((em) => em.Value)) {
                 output.Identifier(em.Name);
                 output.WriteRaw(": ");
                 output.Value(em.Value);
-
-                isFirst = false;
+                output.Comma();
+                output.NewLine();
             }
 
-            output.NewLine();
-            output.CloseBrace(false);
-            output.Comma();
-            output.Value(typeInformation.IsFlagsEnum);
-            output.NewLine();
+            output.CloseBrace();
 
             output.RPar();
             output.Semicolon();
@@ -1096,6 +1184,8 @@ namespace JSIL {
             if (invokeMethod != null)
             {
                 output.Comma();
+                output.NewLine();
+
                 astEmitter.ReferenceContext.Push();
                 astEmitter.ReferenceContext.DefiningType = del;
                 try
@@ -1108,6 +1198,16 @@ namespace JSIL {
                 finally
                 {
                     astEmitter.ReferenceContext.Pop();
+                }
+
+                if (
+                    invokeMethod.HasPInvokeInfo || 
+                    invokeMethod.MethodReturnType.HasMarshalInfo ||
+                    invokeMethod.Parameters.Any(p => p.HasMarshalInfo)
+                ) {
+                    output.Comma();
+                    TranslatePInvokeInfo(invokeMethod, invokeMethod, astEmitter, output);
+                    output.NewLine();
                 }
             }
 
@@ -1243,7 +1343,7 @@ namespace JSIL {
                     output.NewLine();
                     output.NewLine();
 
-                    TranslateEnum(context, output, typedef);
+                    TranslateEnum(context, output, typedef, astEmitter);
                     return;
                 } else if (typeInfo.IsDelegate) {
                     output.Comment("delegate {0}", Util.DemangleCecilTypeName(typedef.FullName));
@@ -1805,7 +1905,7 @@ namespace JSIL {
                 var pr = new ProgressReporter();
 
                 context.CurrentMethod = methodDef;
-                if ((methodDef.Body.CodeSize > LargeMethodThreshold) && (this.DecompilingMethod != null))
+                if ((bodyDef.Body.CodeSize > LargeMethodThreshold) && (this.DecompilingMethod != null))
                     this.DecompilingMethod(method.FullName, pr);
 
                 ILBlock ilb;
@@ -2559,36 +2659,36 @@ namespace JSIL {
 
         protected void CreateMethodInformation (
             MethodInfo methodInfo, bool stubbed,
-            out bool isExternal, out bool isReplaced, 
+            out bool isExternal, out bool isJSReplaced, 
             out bool methodIsProxied
         ) {
-            isReplaced = methodInfo.Metadata.HasAttribute("JSIL.Meta.JSReplacement");
+            isJSReplaced = methodInfo.Metadata.HasAttribute("JSIL.Meta.JSReplacement");
             methodIsProxied = (methodInfo.IsFromProxy && methodInfo.Member.HasBody) &&
-                !methodInfo.IsExternal && !isReplaced;
+                !methodInfo.IsExternal && !isJSReplaced;
 
             isExternal = methodInfo.IsExternal || (stubbed && !methodIsProxied && !methodInfo.IsUnstubbable);
         }
 
         protected bool ShouldTranslateMethodBody (
             MethodDefinition method, MethodInfo methodInfo, bool stubbed,
-            out bool isExternal, out bool isReplaced,
+            out bool isExternal, out bool isJSReplaced,
             out bool methodIsProxied
         ) {
             if (methodInfo == null) {
-                isExternal = isReplaced = methodIsProxied = false;
+                isExternal = isJSReplaced = methodIsProxied = false;
                 return false;
             }
 
             CreateMethodInformation(
                 methodInfo, stubbed,
-                out isExternal, out isReplaced, out methodIsProxied
+                out isExternal, out isJSReplaced, out methodIsProxied
             );
 
             if(ShouldSkipMember(method))
                 return false;
 
             if (isExternal) {
-                if (isReplaced)
+                if (isJSReplaced)
                     return false;
 
                 var isProperty = methodInfo.DeclaringProperty != null;
@@ -2604,7 +2704,7 @@ namespace JSIL {
 
             if (methodInfo.IsIgnored)
                 return false;
-            if (!method.HasBody && !isExternal)
+            if (!method.HasBody && !isExternal && !methodIsProxied)
                 return false;
 
             return true;
@@ -2707,6 +2807,118 @@ namespace JSIL {
             }
         }
 
+        private void TranslatePInvokeInfo (
+            MethodReference methodRef, MethodDefinition method, 
+            JavascriptAstEmitter astEmitter, JavascriptFormatter output
+        ) {
+            var pii = method.PInvokeInfo;
+
+            output.OpenBrace();
+
+            if (pii != null) {
+                output.WriteRaw("Module: ");
+                output.Value(pii.Module.Name);
+                output.Comma();
+                output.NewLine();
+
+                if (pii.IsCharSetAuto) {
+                    output.WriteRaw("CharSet: 'auto',");
+                    output.NewLine();
+                } else if (pii.IsCharSetUnicode) {
+                    output.WriteRaw("CharSet: 'unicode',");
+                    output.NewLine();
+                } else if (pii.IsCharSetAnsi) {
+                    output.WriteRaw("CharSet: 'ansi',");
+                    output.NewLine();
+                }
+
+                if ((pii.EntryPoint != null) && (pii.EntryPoint != method.Name)) {
+                    output.WriteRaw("EntryPoint: ");
+                    output.Value(pii.EntryPoint);
+                    output.Comma();
+                    output.NewLine();
+                }
+            }
+
+            bool isArgsDictOpen = false;
+
+            foreach (var p in method.Parameters) {
+                if (p.HasMarshalInfo) {
+                    if (!isArgsDictOpen) {
+                        isArgsDictOpen = true;
+                        output.WriteRaw("Parameters: ");
+                        output.OpenBracket(true);
+                    } else {
+                        output.Comma();
+                        output.NewLine();
+                    }
+
+                    TranslateMarshalInfo(
+                        methodRef, method,
+                        p.Attributes, p.MarshalInfo, 
+                        astEmitter, output
+                    );
+                } else if (isArgsDictOpen) {
+                    output.WriteRaw(", null");
+                    output.NewLine();
+                }
+            }
+
+            if (isArgsDictOpen)
+                output.CloseBracket(true);
+
+            if (method.MethodReturnType.HasMarshalInfo) {
+                if (isArgsDictOpen)
+                    output.Comma();
+
+                output.WriteRaw("Result: ");
+
+                TranslateMarshalInfo(
+                    methodRef, method,
+                    method.MethodReturnType.Attributes, method.MethodReturnType.MarshalInfo, 
+                    astEmitter, output
+                );
+                output.NewLine();
+            }
+
+            output.CloseBrace(false);
+        }
+
+        private void TranslateMarshalInfo (
+            MethodReference methodRef, MethodDefinition method,
+            Mono.Cecil.ParameterAttributes attributes, MarshalInfo mi, 
+            JavascriptAstEmitter astEmitter, JavascriptFormatter output
+        ) {
+            output.OpenBrace();
+
+            if (mi.NativeType == NativeType.CustomMarshaler) {
+                var cmi = (CustomMarshalInfo)mi;
+
+                output.WriteRaw("CustomMarshaler: ");
+                output.TypeReference(cmi.ManagedType, astEmitter.ReferenceContext);
+
+                if (cmi.Cookie != null) {
+                    output.Comma();
+                    output.WriteRaw("Cookie: ");
+                    output.Value(cmi.Cookie);
+                }
+            } else {
+                output.WriteRaw("NativeType: ");
+                output.Value(mi.NativeType.ToString());
+            }
+
+            if (attributes.HasFlag(Mono.Cecil.ParameterAttributes.Out)) {
+                output.Comma();
+                output.NewLine();
+                output.WriteRaw("Out: true");
+                output.NewLine();
+            } else {
+                output.NewLine();
+            }
+
+            output.CloseBrace(false);
+        }
+
         protected void DefineMethod (
             DecompilerContext context, MethodReference methodRef, MethodDefinition method,
             JavascriptAstEmitter astEmitter, JavascriptFormatter output, bool stubbed,
@@ -2771,7 +2983,11 @@ namespace JSIL {
             try {
                 dollar.WriteTo(output);
                 output.Dot();
-                if (isExternal && !Configuration.GenerateSkeletonsForStubbedAssemblies.GetValueOrDefault(false))
+                if (methodInfo.IsPInvoke)
+                    // FIXME: Write out dll name from DllImport
+                    // FIXME: Write out alternate method name if provided
+                    output.Identifier("PInvokeMethod", EscapingMode.None);
+                else if (isExternal && !Configuration.GenerateSkeletonsForStubbedAssemblies.GetValueOrDefault(false))
                     output.Identifier("ExternalMethod", EscapingMode.None);
                 else
                     output.Identifier("Method", EscapingMode.None);
@@ -2788,7 +3004,13 @@ namespace JSIL {
 
                 output.MethodSignature(methodRef, methodInfo.Signature, astEmitter.ReferenceContext);
 
-                if (!isExternal) {
+                if (methodInfo.IsPInvoke && method.HasPInvokeInfo) {
+                    output.Comma();
+                    output.NewLine();
+                    TranslatePInvokeInfo(
+                        methodRef, method, astEmitter, output
+                    );
+                } else if (!isExternal) {
                     output.Comma();
                     output.NewLine();
 

@@ -69,7 +69,7 @@ namespace JSIL.Tests {
             ));
             Assert.IsTrue(Regex.IsMatch(
                 generatedJs,
-                @"\$thisType.Field = e.MemberwiseClone\(\)"
+                @"\$thisType.Field = e"
             ));
             Assert.IsTrue(Regex.IsMatch(
                 generatedJs,
@@ -752,6 +752,18 @@ namespace JSIL.Tests {
 
             var generatedJs = GenericTest(
                 @"AnalysisTestCases\Issue494_2.cs",
+                output, output
+            );
+
+            Console.WriteLine(generatedJs);
+        }
+
+        [Test]
+        public void Issue667 () {
+            string output = "a = 5\r\nb = 6\r\na = 3\r\nb = 7";
+
+            var generatedJs = GenericTest(
+                @"AnalysisTestCases\Issue667.cs",
                 output, output
             );
 

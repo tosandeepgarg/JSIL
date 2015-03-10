@@ -13,6 +13,11 @@ namespace JSIL.Runtime {
         }
     }
 
+    /// <summary>
+    /// A packed array that is allocated in the managed heap.
+    /// Packed arrays always have a dense in-memory representation, even in JS. 
+    /// This allows passing them to APIs like WebGL along with pinning and fast marshalling/unmarshalling.
+    /// </summary>
     public unsafe interface IPackedArray<T> {
         T this[int index] {
             [JSRuntimeDispatch]
@@ -55,13 +60,66 @@ namespace JSIL.Runtime {
         int Length { get; }
     }
 
+    /// <summary>
+    /// A packed array that is allocated in the native (emscripten in JS) heap.
+    /// Because this array is allocated in the native heap, you must explicitly free it.
+    /// </summary>
+    public class NativePackedArray<T> : IDisposable
+        where T : struct
+    {
+        public readonly int Length;
+
+        private readonly T[] _Array;
+        private bool IsNotDisposed;
+
+        public NativePackedArray (int length) {
+            _Array = new T[length];
+            Length = length;
+            IsNotDisposed = true;
+        }
+
+        /// <summary>
+        /// If you load multiple emscripten modules, it's necessary to specify which one's heap you wish to allocate into.
+        /// </summary>
+        /// <param name="dllName">The name of the module (the name you pass to DllImport)</param>
+        public NativePackedArray (string dllName, int length)
+            : this (length) {
+        }
+
+        public T[] Array {
+            [JSIsPure]
+            get {
+                if (!IsNotDisposed)
+                    throw new ObjectDisposedException("this");
+
+                return _Array;
+            }
+        }
+
+        [JSIsPure]
+        public static implicit operator T[] (NativePackedArray<T> nativeArray) {
+            if (!nativeArray.IsNotDisposed)
+                throw new ObjectDisposedException("nativeArray");
+
+            return nativeArray.Array;
+        }
+
+        [JSReplacement("JSIL.PackedArray.Dispose($this)")]
+        public void Dispose () {
+            if (!IsNotDisposed)
+                throw new ObjectDisposedException("this");
+
+            IsNotDisposed = false;
+        }
+    }
+
     public static class PackedArray {
-        [JSReplacement("JSIL.PackedArray.New($T, $size)")]
+        [JSReplacement("JSIL.PackedArray.New($T, $length)")]
         [JSPackedArrayReturnValue]
-        public static T[] New<T> (int size) 
+        public static T[] New<T> (int length) 
             where T : struct
         {
-            return new T[size];
+            return new T[length];
         }
     }
 

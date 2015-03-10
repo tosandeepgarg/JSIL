@@ -2118,17 +2118,24 @@ namespace JSIL {
             if ((value.IsNull) && !(value is JSUntranslatableExpression) && !(value is JSIgnoredExpression))
                 return new JSNullExpression();
 
+            var valueType = value.GetActualType(TypeSystem);
+
             JSVariable jsv = MapVariable(variable);
 
             if (jsv.IsReference) {
-                JSExpression materializedValue;
-                if (!JSReferenceExpression.TryMaterialize(JSIL, value, out materializedValue))
-                    WarningFormatFunction("Cannot store a non-reference into variable {0}: {1}", jsv, value);
-                else
-                    value = materializedValue;
-            }
+                if (
+                    (valueType.IsByReference || valueType.IsPointer) &&
+                    TypeUtil.TypesAreAssignable(TypeInfo, variable.Type, valueType)
+                ) {
 
-            var valueType = value.GetActualType(TypeSystem);
+                } else {
+                    JSExpression materializedValue;
+                    if (!JSReferenceExpression.TryMaterialize(JSIL, value, out materializedValue))
+                        WarningFormatFunction("Cannot store a non-reference into variable {0}: {1}", jsv, value);
+                    else
+                        value = materializedValue;
+                }
+            }
 
             // Assignment from a packed array field into a non-packed array variable needs to change
             //  the type of the variable so that it is also treated as a packed array.
@@ -2308,6 +2315,10 @@ namespace JSIL {
             if (targetVariable != null) {
                 if (!targetVariable.IsReference)
                     WarningFormatFunction("unsupported target variable for stobj: {0}", node.Arguments[0]);
+
+                if (!valueType.IsByReference) {
+                    return new JSWriteThroughReferenceExpression(targetVariable, value);
+                }
             } else {
                 JSExpression referent;
                 if (!JSReferenceExpression.TryMaterialize(JSIL, target, out referent))
@@ -2966,117 +2977,6 @@ namespace JSIL {
             }
         }
 
-        protected JSExpression Translate_InitializedObject (ILExpression node) {
-            // This should get eliminated by the handler for InitObject, but if we just return a null expression here,
-            //  stfld treats us as an invalid assignment target.
-            return new JSInitializedObject(node.ExpectedType);
-        }
-
-        protected JSExpression Translate_InitCollection (ILExpression node) {
-            var values = new List<JSArrayExpression>();
-
-            for (var i = 1; i < node.Arguments.Count; i++) {
-                var translated = TranslateNode(node.Arguments[i]);
-                translated = JSReferenceExpression.Strip(translated);
-
-                var invocation = (JSInvocationExpression)translated;
-
-                // each JSArrayExpression added to values contains the arguments
-                // to the Add method which is called by CollectionInitializer.Apply
-                values.Add(new JSArrayExpression(TypeSystem.Object, invocation.Arguments.ToArray()));
-            }
-
-            var initializer = JSIL.NewCollectionInitializer(
-                values
-            );
-
-            var target = TranslateNode(node.Arguments[0]);
-
-            return new JSBinaryOperatorExpression(
-                JSOperator.Assignment,
-                target,
-                initializer,
-                target.GetActualType(TypeSystem)
-            );
-        }
-
-        protected JSInitializerApplicationExpression Translate_InitObject (ILExpression node) {
-            var target = TranslateNode(node.Arguments[0]);
-
-            var initializers = new List<JSPairExpression>();
-
-            for (var i = 1; i < node.Arguments.Count; i++) {
-                var translated = TranslateNode(node.Arguments[i]);
-                translated = JSReferenceExpression.Strip(translated);
-
-                var boe = translated as JSBinaryOperatorExpression;
-                var ie = translated as JSInvocationExpression;
-                var iae = translated as JSInitializerApplicationExpression;
-
-                if (boe != null) {
-                    var left = boe.Left;
-                    left = JSReferenceExpression.Strip(left);
-
-                    var leftDot = left as JSDotExpressionBase;
-
-                    if (leftDot != null) {
-                        var key = leftDot.Member;
-                        var value = boe.Right;
-
-                        initializers.Add(new JSPairExpression(key, value));
-                    } else {
-                        WarningFormatFunction("Unrecognized object initializer target: {0}", left);
-                    }
-                } else if (ie != null) {
-                    var method = ie.JSMethod;
-
-                    if (
-                        (method != null) && (method.Method.DeclaringProperty != null)
-                    ) {
-                        initializers.Add(new JSPairExpression(
-                            new JSProperty(method.Reference, method.Method.DeclaringProperty), ie.Arguments[0]
-                        ));
-                    } else {
-                        WarningFormatFunction("Object initializer element not implemented: {0}", translated);
-                    }
-                } else if (iae != null) {
-                    var targetDot = iae.Target as JSDotExpressionBase;
-                    if (targetDot == null) {
-                        WarningFormatFunction("Unrecognized object initializer target: {0}", iae.Target);
-                        continue;
-                    }
-
-                    var targetDotInitObject = targetDot.Target as JSInitializedObject;
-                    if (targetDotInitObject == null) {
-                        WarningFormatFunction("Unrecognized object initializer target: {0}", iae.Target);
-                        continue;
-                    }
-
-                    var key = targetDot.Member;
-                    JSExpression newInstance = new JSNullLiteral(key.GetActualType(TypeSystem));
-
-                    var newInstanceInitializer = initializers.FirstOrDefault(
-                        (pair) =>
-                            pair.Key.Equals(key)
-                    );
-                    if (newInstanceInitializer != null) {
-                        initializers.Remove(newInstanceInitializer);
-                        newInstance = newInstanceInitializer.Value;
-                    }
-
-                    initializers.Add(new JSPairExpression(
-                        key, new JSNestedObjectInitializerExpression(newInstance, iae.Initializer)
-                    ));
-                } else {
-                    WarningFormatFunction("Object initializer element not implemented: {0}", translated);
-                }
-            }
-
-            return new JSInitializerApplicationExpression(
-                target, new JSObjectExpression(initializers.ToArray())
-            );
-        }
-
         protected JSExpression Translate_TypeOf (TypeReference type) {
             return new JSTypeOfExpression(type);
         }
@@ -3356,7 +3256,7 @@ namespace JSIL {
         }
 
         protected JSExpression Translate_CallSetter (ILExpression node, MethodReference setter) {
-            return Translate_Call(node, setter);
+            return FilterSetterInvocation(Translate_Call(node, setter));
         }
 
         protected JSExpression Translate_CallvirtGetter (ILExpression node, MethodReference getter) {
@@ -3365,8 +3265,18 @@ namespace JSIL {
             return result;
         }
 
+        protected JSExpression FilterSetterInvocation (JSExpression invocation) {
+            var ie = invocation as JSInvocationExpression;
+
+            if (ie != null)
+                return new JSPropertySetterInvocation(ie);
+            else
+                // Probably an assignment or something.
+                return invocation;
+        }
+
         protected JSExpression Translate_CallvirtSetter (ILExpression node, MethodReference setter) {
-            return Translate_Callvirt(node, setter);
+            return FilterSetterInvocation(Translate_Callvirt(node, setter));
         }
 
         protected JSUnaryOperatorExpression Translate_PostIncrement (ILExpression node, int arg) {

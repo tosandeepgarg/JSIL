@@ -6,8 +6,8 @@ using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
+using FSharp.Compiler.CodeDom;
 using Microsoft.CSharp;
-using Microsoft.FSharp.Compiler.CodeDom;
 using Microsoft.VisualBasic;
 
 namespace JSIL.Tests {
@@ -79,6 +79,10 @@ namespace JSIL.Tests {
             );
         }
 
+        private static DateTime GetJSILMetaTimestamp () {
+            return File.GetLastWriteTimeUtc(typeof(JSIL.Meta.JSChangeName).Assembly.Location);
+        }
+
         private static bool CheckCompileManifest (IEnumerable<string> inputs, string outputDirectory) {
             var manifestPath = Path.Combine(outputDirectory, "compileManifest.json");
             if (!File.Exists(manifestPath))
@@ -86,6 +90,17 @@ namespace JSIL.Tests {
 
             var jss = new JavaScriptSerializer();
             var manifest = jss.Deserialize<Dictionary<string, string>>(File.ReadAllText(manifestPath));
+
+            var expectedMetaTimestamp = GetJSILMetaTimestamp().ToString();
+
+            string metaTimestamp;
+            if (!manifest.TryGetValue("metaTimestamp", out metaTimestamp)) {
+                return false;
+            }
+
+            if (metaTimestamp != expectedMetaTimestamp) {
+                return false;
+            }
 
             foreach (var input in inputs) {
                 var fi = new FileInfo(input);
@@ -107,6 +122,8 @@ namespace JSIL.Tests {
 
         private static void WriteCompileManifest (IEnumerable<string> inputs, string outputDirectory) {
             var manifest = new Dictionary<string, string>();
+
+            manifest["metaTimestamp"] = GetJSILMetaTimestamp().ToString();
 
             foreach (var input in inputs) {
                 var fi = new FileInfo(input);

@@ -36,6 +36,7 @@ namespace JSIL.Tests {
             RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.Singleline
         );
 
+        public static readonly string JSILFolder;
         public static readonly string TestSourceFolder;
         public static readonly string JSShellPath;
         public static readonly string DebugJSShellPath;
@@ -44,11 +45,14 @@ namespace JSIL.Tests {
 
         public string StartupPrologue;
 
+        public Func<string> GetTestRunnerQueryString = () => "";
+
         public readonly TypeInfoProvider TypeInfo;
         public readonly AssemblyCache AssemblyCache;
         public readonly string[] StubbedAssemblies;
         public readonly string[] JSFilenames;
         public readonly string OutputPath;
+        public readonly string SourceDirectory;
         public readonly Assembly Assembly;
         public readonly CompileResult CompileResult;
         public readonly TimeSpan CompilationElapsed;
@@ -59,6 +63,8 @@ namespace JSIL.Tests {
         static ComparisonTest () {
             var testAssembly = typeof(ComparisonTest).Assembly;
             var assemblyPath = Path.GetDirectoryName(Util.GetPathOfAssembly(testAssembly));
+
+            JSILFolder = Path.GetDirectoryName(Util.GetPathOfAssembly(typeof(JSIL.AssemblyTranslator).Assembly));
 
             TestSourceFolder = Path.GetFullPath(Path.Combine(assemblyPath, "..", "Tests"));
             if (TestSourceFolder[TestSourceFolder.Length - 1] != Path.DirectorySeparatorChar)
@@ -126,6 +132,8 @@ namespace JSIL.Tests {
             if (extensions.Length != 1)
                 throw new InvalidOperationException("Mixture of different source languages provided.");
 
+            SourceDirectory = Path.GetDirectoryName(absoluteFilenames.First());
+
             var assemblyNamePrefix = Path.GetDirectoryName(outputPath).Split(new char[] { '\\', '/' }).Last();
             var assemblyName = Path.Combine(
                 assemblyNamePrefix,
@@ -165,7 +173,7 @@ namespace JSIL.Tests {
             CompilationElapsed = TimeSpan.FromTicks(ended - started);
         }
 
-        public static string GetTestRunnerLink (string testFile) {
+        public static string GetTestRunnerLink (string testFile, string queryString = "") {
             var rootPath = Path.GetFullPath(Path.Combine(
                 Path.GetDirectoryName(LoaderJSPath),
                 @"..\"
@@ -176,7 +184,8 @@ namespace JSIL.Tests {
             );
 
             return String.Format(
-                "{0}#{1}", uri,
+                "{0}?{1}#{2}", uri,
+                queryString,
                 MapSourceFileToTestFile(Path.GetFullPath(testFile))
                     .Replace(rootPath, "")
                     .Replace("\\", "/")
@@ -249,48 +258,66 @@ namespace JSIL.Tests {
         }
 
         public string RunCSharp (string[] args, out long elapsed) {
+            string currentDir = null;
 
-            if (Assembly.Location.EndsWith(".exe")) {
-                long startedCs = DateTime.UtcNow.Ticks;
+            try {
+                lock (this) {
+                    // FIXME: Not thread safe.
+                    currentDir = Environment.CurrentDirectory;
 
-                string stdout, stderr;
-                int exitCode = RunCSharpExecutable(args, out stdout, out stderr);
+                    // HACK: We chdir to the original location of the test. This ensures the test can find any DLLs it needs.
+                    Environment.CurrentDirectory = this.SourceDirectory;
+                }
 
-                long endedCs = DateTime.UtcNow.Ticks;
+                if (Assembly.Location.EndsWith(".exe")) {
+                    long startedCs = DateTime.UtcNow.Ticks;
 
-                elapsed = endedCs - startedCs;
-                if (exitCode != 0)
-                    return String.Format("Process exited with code {0}\r\n{1}\r\n{2}", exitCode, stdout, stderr);
-                return stdout + stderr;
-            } else {
-                TextWriter oldStdout = null;
-                using (var sw = new StringWriter()) {
-                    oldStdout = Console.Out;
-                    try {
-                        oldStdout.Flush();
-                        Console.SetOut(sw);
+                    string stdout, stderr;
+                    int exitCode = RunCSharpExecutable(args, out stdout, out stderr);
 
-                        var testMethod = GetTestMethod();
-                        long startedCs = DateTime.UtcNow.Ticks;
+                    long endedCs = DateTime.UtcNow.Ticks;
 
-                        if (MainAcceptsArguments.Value) {
-                            testMethod.Invoke(null, new object[] { args });
-                        } else {
-                            if ((args != null) && (args.Length > 0))
-                                throw new ArgumentException("Test case does not accept arguments");
+                    elapsed = endedCs - startedCs;
+                    if (exitCode != 0)
+                        return String.Format("Process exited with code {0}\r\n{1}\r\n{2}", exitCode, stdout, stderr);
+                    return stdout + stderr;
+                } else {
+                    TextWriter oldStdout = null;
+                    using (var sw = new StringWriter()) {
+                        oldStdout = Console.Out;
+                        try {
+                            oldStdout.Flush();
+                            Console.SetOut(sw);
 
-                            testMethod.Invoke(null, new object[] { });
+                            var testMethod = GetTestMethod();
+                            long startedCs = DateTime.UtcNow.Ticks;
+
+                            if (MainAcceptsArguments.Value) {
+                                testMethod.Invoke(null, new object[] { args });
+                            } else {
+                                if ((args != null) && (args.Length > 0))
+                                    throw new ArgumentException("Test case does not accept arguments");
+
+                                testMethod.Invoke(null, new object[] { });
+                            }
+
+                            long endedCs = DateTime.UtcNow.Ticks;
+
+                            elapsed = endedCs - startedCs;
+                            sw.Flush();
+                            return sw.ToString();
+                        } finally {
+                            Console.SetOut(oldStdout);
                         }
-
-                        long endedCs = DateTime.UtcNow.Ticks;
-
-                        elapsed = endedCs - startedCs;
-                        sw.Flush();
-                        return sw.ToString();
-                    } finally {
-                        Console.SetOut(oldStdout);
                     }
                 }
+            } finally {
+                if (currentDir == null)
+                    throw new InvalidOperationException();
+
+                lock (this)
+                    if (Environment.CurrentDirectory == this.SourceDirectory)
+                        Environment.CurrentDirectory = currentDir;
             }
         }
 
@@ -363,7 +390,8 @@ namespace JSIL.Tests {
             Func<TranslationResult, TOutput> processResult,
             Func<Configuration> makeConfiguration = null,
             Action<Exception> onTranslationFailure = null,
-            Action<AssemblyTranslator> initializeTranslator = null
+            Action<AssemblyTranslator> initializeTranslator = null,
+            bool? scanForProxies = null
         ) {
             Configuration configuration;
 
@@ -388,7 +416,7 @@ namespace JSIL.Tests {
 
                 try {
                     translationResult = translator.Translate(
-                        assemblyPath, TypeInfo == null
+                        assemblyPath, scanForProxies == null ? TypeInfo == null : (bool)scanForProxies
                     );
 
                     AssemblyTranslator.GenerateManifest(translator.Manifest, assemblyPath, translationResult);
@@ -424,7 +452,8 @@ namespace JSIL.Tests {
             Func<Configuration> makeConfiguration = null,
             bool throwOnUnimplementedExternals = true,
             Action<Exception> onTranslationFailure = null,
-            Action<AssemblyTranslator> initializeTranslator = null
+            Action<AssemblyTranslator> initializeTranslator = null,
+            bool? scanForProxies = null
         ) {
             var translationStarted = DateTime.UtcNow.Ticks;
             string translatedJs;
@@ -439,7 +468,8 @@ namespace JSIL.Tests {
                     (tr) => tr.WriteToString(), 
                     makeConfiguration, 
                     onTranslationFailure,
-                    initializeTranslator
+                    initializeTranslator,
+                    scanForProxies
                 );
             } else {
                 throw new InvalidDataException("Provided both JS filenames and assembly");
@@ -477,7 +507,7 @@ namespace JSIL.Tests {
             }
 
             var invocationJs = String.Format(
-                "runTestCase = JSIL.Shell.TestPrologue(\r\n  {0}, \r\n  {1}, \r\n  {2}, \r\n  {3}, \r\n  {4}, \r\n  {5}\r\n);",
+                "var runTestCase = JSIL.Shell.TestPrologue(\r\n  {0}, \r\n  {1}, \r\n  {2}, \r\n  {3}, \r\n  {4}, \r\n  {5}\r\n);",
                 JavascriptExecutionTimeout,
                 Util.EscapeString(testAssemblyName),
                 Util.EscapeString(testTypeName), 
@@ -521,14 +551,16 @@ namespace JSIL.Tests {
             Func<Configuration> makeConfiguration = null,
             JSEvaluationConfig evaluationConfig = null,
             Action<Exception> onTranslationFailure = null,
-            Action<AssemblyTranslator> initializeTranslator = null
+            Action<AssemblyTranslator> initializeTranslator = null,
+            bool? scanForProxies = null
         ) {
             string temp1, temp2;
 
             return RunJavascript(
                 args, out generatedJavascript, out elapsedTranslation, out elapsedJs, 
                 out temp1, out temp2,
-                makeConfiguration, evaluationConfig, onTranslationFailure, initializeTranslator
+                makeConfiguration, evaluationConfig, onTranslationFailure, initializeTranslator,
+                scanForProxies
             );
         }
 
@@ -537,14 +569,16 @@ namespace JSIL.Tests {
             Func<Configuration> makeConfiguration = null,
             JSEvaluationConfig evaluationConfig = null,
             Action<Exception> onTranslationFailure = null,
-            Action<AssemblyTranslator> initializeTranslator = null
+            Action<AssemblyTranslator> initializeTranslator = null,
+            bool? scanForProxies = null
         ) {
             var tempFilename = GenerateJavascript(
                 args, out generatedJavascript, out elapsedTranslation, 
                 makeConfiguration, 
                 evaluationConfig == null || evaluationConfig.ThrowOnUnimplementedExternals, 
                 onTranslationFailure,
-                initializeTranslator
+                initializeTranslator,
+                scanForProxies
             );
 
             using (var evaluator = EvaluatorPool.Get()) {
@@ -553,8 +587,18 @@ namespace JSIL.Tests {
                 var sentinelEnd = "// Test output ends here //";
                 var elapsedPrefix = "// elapsed: ";
 
+                var manifest = String.Format(
+                    "['Script', {0}]", Util.EscapeString(tempFilename)
+                );
+
+                var dlls = Directory.GetFiles(SourceDirectory, "*.emjs");
+                foreach (var dll in dlls) {
+                    manifest += "," + Environment.NewLine +
+                        String.Format("['NativeLibrary', {0}]", Util.EscapeString(Path.GetFullPath(dll)));
+                }
+
                 StartupPrologue =
-                    String.Format("contentManifest['Test'] = [['Script', {0}]]; ", Util.EscapeString(tempFilename));
+                    String.Format("contentManifest['Test'] = [{0}]; ", manifest);
                 if (evaluationConfig != null && evaluationConfig.AdditionalFilesToLoad != null){
                     foreach (var file in evaluationConfig.AdditionalFilesToLoad)
                     {
@@ -642,7 +686,8 @@ namespace JSIL.Tests {
             JSEvaluationConfig evaluationConfig = null,
             bool dumpJsOnFailure = true,
             Action<Exception> onTranslationFailure = null,
-            Action<AssemblyTranslator> initializeTranslator = null
+            Action<AssemblyTranslator> initializeTranslator = null,
+            bool? scanForProxies = null
         ) {
             var signals = new[] {
                     new ManualResetEventSlim(false), new ManualResetEventSlim(false)
@@ -679,7 +724,8 @@ namespace JSIL.Tests {
                         makeConfiguration: makeConfiguration,
                         evaluationConfig: evaluationConfig,
                         onTranslationFailure: onTranslationFailure,
-                        initializeTranslator: initializeTranslator
+                        initializeTranslator: initializeTranslator,
+                        scanForProxies: scanForProxies
                     ).Replace("\r", "").Trim();
                 } catch (Exception ex) {
                     errors[1] = ex;
@@ -725,7 +771,7 @@ namespace JSIL.Tests {
                 var jsex = ex as JavaScriptEvaluatorException;
                 Console.WriteLine("failed: " + ex.Message + " " + (ex.InnerException == null ? "" : ex.InnerException.Message));
 
-                Console.WriteLine("// {0}", GetTestRunnerLink(OutputPath));
+                Console.WriteLine("// {0}", GetTestRunnerLink(OutputPath, GetTestRunnerQueryString()));
 
                 if ((outputs[1] == null) && (jsex != null))
                     outputs[1] = jsex.Output;
