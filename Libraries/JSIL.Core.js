@@ -10091,8 +10091,8 @@ JSIL.$GetMethodImplementation = function (method, target) {
       // Return an invoker that concats generic arguments and arglist and invokes
       //  static generic method implementation directly.
 
-      return function (methodArgs) { 
-        var fullArgumentList = genericArgumentValues.concat(methodArgs);
+      return function () { 
+        var fullArgumentList = genericArgumentValues.concat(Array.prototype.slice.call(arguments));
 
         return result.apply(
           publicInterface, fullArgumentList
@@ -10102,11 +10102,9 @@ JSIL.$GetMethodImplementation = function (method, target) {
     } else if (result instanceof JSIL.InterfaceMethod) {
       // Return an invoker that specifies the generic arguments and passes in rest
 
-      return function (methodArgs) { 
-        return result.Call(
-          this, 
-          genericArgumentValues, 
-          methodArgs
+      return function () { 
+        return result.Call.apply(result,
+          [this, genericArgumentValues].concat(Array.prototype.slice.call(arguments))
         );
       };
     // 1.3 Generic instance (non-interface)
@@ -10114,8 +10112,8 @@ JSIL.$GetMethodImplementation = function (method, target) {
       // Return an invoker that concats generic arguments and arglist and invokes
       //  generic method implementation directly.
 
-      return function (methodArgs) { 
-        var fullArgumentList = genericArgumentValues.concat(methodArgs);
+      return function () { 
+        var fullArgumentList = genericArgumentValues.concat(Array.prototype.slice.call(arguments));
 
         return result.apply(
           this, fullArgumentList
