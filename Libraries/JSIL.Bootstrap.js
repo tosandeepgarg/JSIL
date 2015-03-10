@@ -2362,9 +2362,18 @@ JSIL.MakeStruct("System.ValueType", "System.Decimal", true, [], function ($) {
     return 0;
   });
   
+  $.Method({Static:false , Public:true }, "ToDouble", 
+    (new JSIL.MethodSignature($.Double, [mscorlib.TypeRef("System.IFormatProvider")], [])),
+    function (formatProvider) { return decimalToNumber(this); }
+  ).Overrides("System.IConvertible", "ToDouble");
+  
   JSIL.MakeCastMethods(
     $.publicInterface, $.typeObject, "decimal"
   );
+  
+  $.ImplementInterfaces(
+      $jsilcore.TypeRef("System.IConvertible")
+    );
 });
 
 JSIL.ImplementExternals("System.Environment", function ($) {
