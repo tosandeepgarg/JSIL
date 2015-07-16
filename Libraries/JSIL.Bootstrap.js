@@ -2431,7 +2431,7 @@ $jsilcore.hashContainerBase = function ($) {
   });
 
   $.RawMethod(false, "$searchBucket", function HashContainer_SearchBucket (key) {
-    var hashCode = JSIL.ObjectHashCode(key);
+    var hashCode = JSIL.ObjectHashCode(key, true);
     var bucket = this._dict[hashCode];
     if (!bucket)
       return null;
@@ -2447,7 +2447,7 @@ $jsilcore.hashContainerBase = function ($) {
   });
 
   $.RawMethod(false, "$removeByKey", function HashContainer_Remove (key) {
-    var hashCode = JSIL.ObjectHashCode(key);
+    var hashCode = JSIL.ObjectHashCode(key, true);
     var bucket = this._dict[hashCode];
     if (!bucket)
       return false;
@@ -2466,7 +2466,7 @@ $jsilcore.hashContainerBase = function ($) {
   });
 
   $.RawMethod(false, "$addToBucket", function HashContainer_Add (key, value) {
-    var hashCode = JSIL.ObjectHashCode(key);
+    var hashCode = JSIL.ObjectHashCode(key, true);
     var bucket = this._dict[hashCode];
     if (!bucket)
       this._dict[hashCode] = bucket = [];
