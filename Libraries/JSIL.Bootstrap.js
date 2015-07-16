@@ -1800,6 +1800,13 @@ JSIL.ImplementExternals("System.Collections.Generic.Queue`1", function ($) {
     }
   );
 
+  $.Method({Static:false, Public:true }, "Contains",
+    new JSIL.MethodSignature($.Boolean, [new JSIL.GenericParameter("T", "System.Collections.Generic.Queue`1")], []),
+    function Contains (value) {
+      return JSIL.Array.IndexOf(this._items, this._items.length, value) >= 0;
+    }
+  );
+
   $.Method({Static:false, Public:true }, "get_Count", 
     (new JSIL.MethodSignature($.Int32, [], [])), 
     function get_Count () {
@@ -4603,7 +4610,7 @@ $jsilcore.GetSerializationScratchBuffers = function () {
 
         var result = new Uint8Array(byteCount);
         for (var i = 0; i < byteCount; i++)
-          result[i] = this.uint8[i];
+          result[i] = uint8[i];
 
         return result;
       },
@@ -4611,8 +4618,11 @@ $jsilcore.GetSerializationScratchBuffers = function () {
         offset = offset | 0;
         count = count | 0;
 
+        if (!bytes)
+          JSIL.RuntimeError("bytes cannot be null");
+
         for (var i = 0; i < count; i++)
-          this.uint8[i] = bytes[offset + i];
+          uint8[i] = bytes[offset + i];
       }
     };
   }
@@ -5652,3 +5662,148 @@ JSIL.$WrapIComparer = function (T, comparer) {
     return compare.Call(comparer, null, lhs, rhs);
   };
 };
+
+JSIL.MakeClass("System.Object", "System.Collections.BitArray", true, [], function ($) {
+  $.Property({Public: true , Static: false}, "Method");
+});
+
+function BitArray(length) {
+  this._bytes = new Uint8Array(Math.ceil(length/8));
+}
+
+BitArray.prototype.get = function(i) {
+  var byte = Math.floor(i/8);
+  var mask = 1 << (((i/8)-byte) * 8);
+
+  return (this._bytes[byte] & mask) != 0;
+}
+
+BitArray.prototype.set = function(i, bool) {
+  var byte = Math.floor(i/8);
+  var mask = 1 << (((i/8)-byte) * 8);
+
+  if (bool) {
+    this._bytes[byte] |= mask;
+  } else {   
+    this._bytes[byte] &= ~mask;
+  }
+}
+
+JSIL.ImplementExternals("System.Collections.BitArray", function ($) {  
+  $.Method({Static:false , Public:true }, ".ctor", 
+    new JSIL.MethodSignature(null, [$.Int32], []), 
+    function _ctor (length) {
+      this._length = length;
+      this._bitarray = new BitArray(length);
+    }
+  );
+
+  $.Method({Static:false, Public:true }, "get_Length", 
+    new JSIL.MethodSignature($.Int32, [], []),
+    function get_Length () {
+      return this._length;
+    }
+  );
+
+  $.Method({Static:false, Public:true }, "Get", 
+    new JSIL.MethodSignature($.Boolean, [$.Int32], []),
+    function Get (index) {
+      return this._bitarray.get(index);
+    }
+  );
+
+  $.Method({Static:false, Public:true }, "get_Item", 
+    new JSIL.MethodSignature($.Boolean, [$.Int32], []),
+    function get_Item (index) {
+      return this._bitarray.get(index);
+    }
+  );
+
+  $.Method({Static:false, Public:true }, "Set", 
+    new JSIL.MethodSignature(null, [$.Int32, $.Boolean], []),
+    function Set (index, bool) {
+      return this._bitarray.set(index, bool);
+    }
+  );
+
+  $.Method({Static:false, Public:true }, "set_Item", 
+    new JSIL.MethodSignature(null, [$.Int32, $.Boolean], []),
+    function set_Item (index, bool) {
+      return this._bitarray.set(index, bool);
+    }
+  );
+});
+
+// modified from http://snipplr.com/view/6889/regular-expressions-for-uri-validationparsing/
+var regexUri = /^([a-z][a-z0-9+.-]*):(?:\/\/((?:(?=((?:[a-z0-9-._~!$&'()*+,;=:]|%[0-9A-F]{2})*))(\3)@)?(?=(\[[0-9A-F:.]{2,}\]|(?:[a-z0-9-._~!$&'()*+,;=]|%[0-9A-F]{2})*))\5(?::(?=(\d*))\6)?)(\/(?=((?:[a-z0-9-._~!$&'()*+,;=:@\/]|%[0-9A-F]{2})*))\8)?|(\/?(?!\/)(?=((?:[a-z0-9-._~!$&'()*+,;=:@\/]|%[0-9A-F]{2})*))\10)?)(?:\?(?=((?:[a-z0-9-._~!$&'()*+,;=:@\/?]|%[0-9A-F]{2})*))\11)?(?:#(?=((?:[a-z0-9-._~!$&'()*+,;=:@\/?]|%[0-9A-F]{2})*))\12)?$/i;
+
+function parseURI(uriString) {
+  uriString = uriString.replace(/\\/g, '/');
+  var uri = {};
+  var match = uriString.match(regexUri);
+  if (match === null) {
+    // it's not a uri
+    uri.path = uriString;
+  } else {
+    uri.scheme = match[1] || match[6];
+    uri.userinfo = match[2]
+    uri.host = match[3]
+    uri.port = match[4]
+    uri.path = match[5] || match[7]
+    uri.query = match[8]
+    uri.fragment = match[9]
+  }
+  return uri;
+}
+
+function pathSplit(s) {
+  return s.split(/\//g).filter(function(x) { return x.length > 0 });
+}
+
+JSIL.MakeClass("System.Object", "System.Uri", true, [], function ($) {
+  $.Property({Public: true , Static: false}, "LocalPath");
+  $.Property({Public: true , Static: false}, "IsAbsoluteUri");
+});
+
+JSIL.ImplementExternals("System.Uri", function ($) {
+  $.Method({Static: false, Public: true}, ".ctor",
+    new JSIL.MethodSignature(null, [$.String], []),
+    function _ctor (uriString) {
+      var uri = parseURI(uriString);
+      this._scheme = uri.scheme;
+      this._path = pathSplit(uri.path);
+    }
+  );
+
+  // Join a path onto the end of an existing uri
+  $.Method({Static: false, Public: true}, ".ctor",
+    new JSIL.MethodSignature(null, [$jsilcore.TypeRef("System.Uri"), $.String], []),
+    function _ctor(baseUri, relativeUriStr) {
+      this._scheme = baseUri._scheme;
+      var relativeUri = new System.Uri(relativeUriStr);
+      this._path = baseUri._path.concat(relativeUri._path);
+    }
+  );
+
+  $.Method({Static:false, Public:true }, "get_IsAbsoluteUri", 
+    new JSIL.MethodSignature($.Boolean, [], []),
+    function get_IsAbsoluteUri () {
+      return this._scheme !== undefined;
+    }
+  );
+
+
+  $.Method({Static:false, Public:true }, "get_LocalPath", 
+    new JSIL.MethodSignature($.String, [], []),
+    function get_LocalPath () {
+      if (this.IsAbsoluteUri) {
+        return "\\\\" + this._path.join("\\");
+      } else {
+        throw new System.InvalidOperationException("only an absolute uri has a LocalPath");
+      }
+      return this._length;
+    }
+  );
+
+
+});

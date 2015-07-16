@@ -41,6 +41,33 @@ export(void) WriteStruct (const int i, const float f, TestStruct * result) {
     result->F = f;
 }
 
+union TestUnion {
+	int I;
+	float F;
+};
+
+export(void)WriteUnionInt(const int i, TestUnion * result) {
+	result->I = i;
+}
+
+export(void)WriteUnionFloat(const float f, TestUnion * result) {
+	result->F = f;
+}
+
+union TestComplexUnion {
+	int I;
+	TestStruct S;
+};
+
+export(void)WriteComplexUnionInt(const int i, TestComplexUnion *result) {
+	result->I = i;
+}
+
+export(void)WriteComplexUnionStruct(const int i, const float f, TestComplexUnion *result) {
+	result->S.I = i;
+	result->S.F = f;
+}
+
 export(TestStruct) ReturnStruct (const int i, const float f) {
     TestStruct result;
     result.I = i;
@@ -54,6 +81,10 @@ export(TestStruct) ReturnStructArgument (const TestStruct arg) {
 
 export(const char *) ReturnString(const char *s) {
 	return s;
+}
+
+export(int) ReturnInt(int i) {
+	return i;
 }
 
 export(const unsigned char *) ReturnStaticString() {
@@ -71,6 +102,14 @@ export(int) CopyStringArgument (char * dst, const int capacity, const char * src
     memset(dst, 0, capacity);
     strcpy(dst, src);
     return length;
+}
+
+
+export(int) CopySecondStringFromArray(char * dst, const int capacity, const char ** src) {
+	int length = strlen(src[1]);
+	memset(dst, 0, capacity);
+	strcpy(dst, src[1]);
+	return length;
 }
 
 export(int) WriteStringIntoBuffer (unsigned char * dst, const int capacity) {
@@ -157,6 +196,18 @@ export(void) FillUshortArray(uint16_t *ramp) {
 	ramp[0] = 192;
 }
 
+export(uint16_t) FirstElementOfUshortArray(uint16_t *arr) {
+	return arr[0];
+}
+
 export(AlignmentStruct) TestAlignment(const AlignmentStruct arg) {
 	return arg;
+}
+
+export(int) ReadStringLength(const char **s) {
+	return strlen(*s);
+}
+
+export(int) ReturnSecondIntFromArray(int *ints) {
+	return ints[1];
 }

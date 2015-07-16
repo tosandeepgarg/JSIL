@@ -1978,6 +1978,16 @@ JSIL.ImplementExternals("System.Text.RegularExpressions.Regex", function ($) {
     }
   );
 
+  $.Method({Static:true , Public:true }, "Replace",
+    (new JSIL.MethodSignature($.String, [
+          $.String, $.String, $.String], [])),
+    function Replace (input, pattern, replacement) {
+      var re = makeRegex(pattern, System.Text.RegularExpressions.RegexOptions.ECMAScript);
+
+      return input.replace(re, replacement);
+    }
+  );
+
   $.Method({Static:false , Public:true }, "Replace", 
     (new JSIL.MethodSignature($.String, [$.String, $.String], [])), 
     function Replace (input, replacement) {

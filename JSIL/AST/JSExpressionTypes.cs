@@ -749,7 +749,7 @@ namespace JSIL.Ast {
         }
 
         public override TypeReference GetActualType (TypeSystem typeSystem) {
-            return new TypeReference("System", "Type", typeSystem.Object.Module, typeSystem.Object.Scope);
+            return typeSystem.SystemType();
         }
 
         public override string ToString () {
@@ -1608,12 +1608,14 @@ namespace JSIL.Ast {
         public readonly bool IsStatic;
         public readonly bool IsVirtual;
         public readonly bool IsReadonly;
+        public readonly int? Offset;
 
-        public JSMemberDescriptor (bool isPublic, bool isStatic, bool isVirtual = false, bool isReadonly = false) {
+        public JSMemberDescriptor (bool isPublic, bool isStatic, bool isVirtual = false, bool isReadonly = false, int? offset = null) {
             IsPublic = isPublic;
             IsStatic = isStatic;
             IsVirtual = isVirtual;
             IsReadonly = isReadonly;
+            Offset = offset;
         }
 
         public override bool IsConstant {
@@ -2078,6 +2080,9 @@ namespace JSIL.Ast {
                         return new JSUntranslatableExpression("Conversion of expression '" + inner + "' to pointer");
                     }
                 }
+            } else if (TypeUtil.IsPointer(currentType)) {
+                if (TypeUtil.IsIntegral(newType))
+                    return new JSPointerCastExpression(inner, newType);
             }
 
             return make();
@@ -2729,7 +2734,10 @@ namespace JSIL.Ast {
         }
 
         public override string ToString () {
-            return String.Format("({0} + {1})", Pointer, Delta);
+            if (MutateInPlace)
+                return String.Format("({0} += {1})", Pointer, Delta);
+            else
+                return String.Format("({0} + {1})", Pointer, Delta);
         }
     }
 

@@ -534,10 +534,16 @@ namespace JSIL {
         public void VisitNode (JSPointerCastExpression pce) {
             Visit(pce.Pointer);
             Output.Dot();
-            Output.Identifier("cast");
-            Output.LPar();
-            Visit(pce.NewType);
-            Output.RPar();
+
+            if (TypeUtil.IsIntegral(pce.GetActualType(TypeSystem))) {
+                Output.Identifier("offsetInBytes");
+                Output.Comment("UNSAFE ptr -> int cast");
+            } else {
+                Output.Identifier("cast");
+                Output.LPar();
+                Visit(pce.NewType);
+                Output.RPar();
+            }
         }
 
         public void VisitNode (JSPointerLiteral pl) {
@@ -553,6 +559,10 @@ namespace JSIL {
                 Output.Value(pl.Value);
                 Output.RPar();
             }
+        }
+
+        public void VisitNode (JSNativeIntegerLiteral nil) {
+            Output.Value(nil.Value);
         }
 
         public void VisitNode (JSPointerDeltaExpression pde) {
@@ -1053,7 +1063,13 @@ namespace JSIL {
         }
 
         public void VisitNode (JSDefaultValueLiteral defaultValue) {
-            if (TypeUtil.IsEnum(defaultValue.Value)) {
+            if (TypeUtil.IsPointer(defaultValue.Value)) {
+                var elementType = defaultValue.Value.GetElementType();
+                Output.WriteRaw("new JSIL.NullPointer");
+                Output.LPar();
+                Output.Identifier(elementType, ReferenceContext, false);
+                Output.RPar();
+            } else if (TypeUtil.IsEnum(defaultValue.Value)) {
                 EnumMemberInfo emi;
                 var enumInfo = TypeInfo.Get(defaultValue.Value);
                 
@@ -1818,6 +1834,12 @@ namespace JSIL {
         }
 
         public void VisitNode (JSBinaryOperatorExpression bop) {
+            if ((bop.Operator is JSAssignmentOperator) && (bop.Left is JSUntranslatableExpression)) {
+                var left = (JSUntranslatableExpression)bop.Left;
+                VisitNode(new JSUntranslatableExpression("Assignment to untranslatable expression " + (left.Type ?? "")));
+                return;
+            }
+
             var resultType = bop.GetActualType(TypeSystem);
             bool needsCast = (bop.Operator is JSArithmeticOperator) && 
                 TypeUtil.IsEnum(TypeUtil.StripNullable(resultType));
@@ -2062,7 +2084,7 @@ namespace JSIL {
         }
 
         public void VisitNode (JSMemberDescriptor desc) {
-            Output.MemberDescriptor(desc.IsPublic, desc.IsStatic, desc.IsVirtual, desc.IsReadonly);
+            Output.MemberDescriptor(desc.IsPublic, desc.IsStatic, desc.IsVirtual, desc.IsReadonly, desc.Offset);
         }
 
         public void VisitNode (JSObjectExpression obj) {

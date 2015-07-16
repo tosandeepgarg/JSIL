@@ -145,8 +145,17 @@
     <None Include="EmscriptenTestCases\GetDelegateForFunctionPointer.cs" />
     <None Include="EmscriptenTestCases\StaticStringFromIntPtr.cs" />
     <None Include="EmscriptenTestCases\OutStructArrayParameter.cs" />
+    <None Include="EmscriptenTestCases\PassPtrToPinnedArray.cs" />
+    <None Include="AnalysisTestCases\Issue696.cs" />
+    <None Include="EmscriptenTestCases\EnumRoundTrip.cs" />
+    <None Include="AnalysisTestCases\FNABaseOffset.cs" />
+    <None Include="EmscriptenTestCases\OutUnionParameter.cs" />
+    <None Include="EmscriptenTestCases\OutComplexUnionParameter.cs" />
+    <None Include="EmscriptenTestCases\ReturnEnum.cs" />
     <Compile Include="EmscriptenTestCases\ProxiedExternFunction.cs" />
     <None Include="EmscriptenTestCases\IntPtrZeroEquality.cs" />
+    <None Include="EmscriptenTestCases\StringArrayParameter.cs" />
+    <None Include="EmscriptenTestCases\IntArrayParameter.cs" />
     <Compile Include="EmscriptenTests.cs" />
     <Compile Include="CodeProviders.cs">
       <SubType>Component</SubType>
@@ -268,6 +277,7 @@
     <None Include="SpecialTestCases\TranslateMethodInStubbedAssembly.cs" />
     <None Include="SpecialTestCases\TranslateMethodInStubbedType.cs" />
     <None Include="FailingTestCases\DelegateMethod_Issue604.cs" />
+    <None Include="PerformanceTestCases\GenericMethodCalls.cs" />
     <Compile Include="TypeInformationTests.cs" />
     <None Include="TestCases\LongArithmetic.cs" />
     <None Include="InterfaceTestCases\NestedInterfaces.cs" />
@@ -396,12 +406,12 @@
     <None Include="UnsafeTestCases\StackAlloc.cs" />
     <None Include="UnsafeTestCases\PointerOrdering.cs" />
     <None Include="UnsafeTestCases\PointerRefCast.cs" />
+    <None Include="UnsafeTestCases\ZeroLengthIntArray.cs" />
     <None Include="FailingTestCases\PassPackedArrayAsNormalArrayArgument.cs" />
     <None Include="FailingTestCases\PassNormalArrayAsPackedArrayArgument.cs" />
     <None Include="FailingTestCases\ReturnNormalArrayAsPackedArray.cs" />
     <None Include="FailingTestCases\ReturnPackedArrayAsNormalArray.cs" />
     <Compile Include="GenericTestFixture.cs" />
-    <None Include="PerformanceTestCases\PointerMethodsAreSingletons.cs" />
     <Compile Include="PerformanceAnalysis.cs" />
     <None Include="PerformanceTestCases\Vector3.cs" />
     <None Include="PerformanceTestCases\OverloadedMethodCalls.cs" />
@@ -432,6 +442,14 @@
     <None Include="UnsafeTestCases\CastAddressOfValueToArray.cs" />
     <None Include="UnsafeTestCases\IgnorePointerFields.cs" />
     <None Include="UnsafeTestCases\PointerWriteConversion_Issue686.cs" />
+    <None Include="UnsafeTestCases\ModifyPackedStructArrayElementStructField.cs" />
+    <None Include="UnsafeTestCases\CustomPacking.cs" />
+    <None Include="UnsafeTestCases\CustomFieldOffset.cs" />
+    <None Include="UnsafeTestCases\CustomFieldOffsetUnion.cs" />
+    <None Include="UnsafeTestCases\UnionContainingEnum.cs" />
+    <None Include="UnsafeTestCases\SDLTouchStructLayout.cs" />
+    <None Include="UnsafeTestCases\ReadInt64InStruct.cs" />
+    <None Include="UnsafeTestCases\WriteUInt64InStruct.cs" />
     <Compile Include="XMLTests.cs" />
     <Compile Include="DependencyTests.cs" />
     <None Include="TestCases\GenericParameterNameShadowing.cs" />

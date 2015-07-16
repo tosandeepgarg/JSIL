@@ -1,0 +1,14 @@
+*.cs text
+*.sln text
+*.js text
+*.csproj text
+*.xaml text
+
+*.exe binary
+*.dll binary
+*.gif binary
+*.png binary
+*.jpg binary
+*.ico binary
+
+* eol=lf
