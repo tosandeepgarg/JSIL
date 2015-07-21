@@ -617,6 +617,10 @@ namespace JSIL {
                 return (target == source);
             else if (TypesAreTriviallyEqual(source, target, out shallowMatch))
                 return true;
+            
+            var targetDefinition = target.Resolve();
+            if (targetDefinition != null && source.Resolve() == targetDefinition)
+                return true;
 
             int targetDepth, sourceDepth;
             FullyDereferenceType(target, out targetDepth);
