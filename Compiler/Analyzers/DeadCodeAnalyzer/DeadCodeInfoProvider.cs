@@ -39,26 +39,35 @@ namespace JSIL.Compiler.Extensibility.DeadCodeAnalyzer {
 
         internal TypeInfoProvider TypeInfoProvider { get; set; }
 
-        public bool IsUsed(MemberReference member) {
+        public bool IsUsed(MemberReference member)
+        {
+            bool? retValue = null;
             var typeReference = member as TypeReference;
             if (typeReference != null)
             {
                 var defenition = typeReference.Resolve();
-                return types.Contains(defenition);
+                retValue= types.Contains(defenition);
             }
 
             var methodReference = member as MethodReference;
             if (methodReference != null) {
                 var defenition = methodReference.Resolve();
-                return methods.Contains(defenition);
+                retValue= methods.Contains(defenition);
             }
 
             var fieldReference = member as FieldReference;
             if (fieldReference != null) {
                 var defenition = fieldReference.Resolve();
-                return fields.Contains(defenition);
+                retValue= fields.Contains(defenition);
             }
-
+            if (retValue.HasValue)
+            {
+                if (!retValue.Value)
+                {
+                    return IsMemberWhiteListed(member);
+                }
+                return true;
+            }
             throw new ArgumentException("Unexpected member reference type");
         }
 
