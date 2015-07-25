@@ -134,40 +134,51 @@ namespace JSIL.Compiler.Extensibility.DeadCodeAnalyzer {
 
         internal TypeInfoProvider TypeInfoProvider { get; set; }
 
-        public bool IsUsed(MemberReference member) {
+        public bool IsUsed(MemberReference member)
+        {
+            bool? retValue = null;
             var typeReference = member as TypeReference;
             if (typeReference != null)
             {
                 var defenition = typeReference.Resolve();
-                return Types.Contains(defenition);
+                retValue = types.Contains(defenition);
             }
 
             var methodReference = member as MethodReference;
             if (methodReference != null) {
                 var defenition = methodReference.Resolve();
-                return Methods.ContainsKey(defenition);
+                retValue = methods.Contains(defenition);
             }
 
             var fieldReference = member as FieldReference;
             if (fieldReference != null) {
                 var defenition = fieldReference.Resolve();
-                return Fields.Contains(defenition);
+                retValue = fields.Contains(defenition);
             }
 
             var propertyReference = member as PropertyReference;
             if (propertyReference != null)
             {
                 var defenition = propertyReference.Resolve();
-                return Properties.Contains(defenition);
+                retValue = Properties.Contains(defenition);
             }
 
             var eventReference = member as EventReference;
             if (eventReference != null)
             {
                 var defenition = eventReference.Resolve();
-                return Events.Contains(defenition);
+                retValue = Events.Contains(defenition);
             }
-
+            
+            if (retValue.HasValue)
+            {
+                if (!retValue.Value)
+                {
+                    return IsMemberWhiteListed(member);
+                }
+                return true;
+            }
+            
             throw new ArgumentException("Unexpected member reference type");
         }
 
