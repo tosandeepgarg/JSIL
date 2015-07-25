@@ -141,19 +141,19 @@ namespace JSIL.Compiler.Extensibility.DeadCodeAnalyzer {
             if (typeReference != null)
             {
                 var defenition = typeReference.Resolve();
-                retValue = types.Contains(defenition);
+                retValue = Types.Contains(defenition);
             }
 
             var methodReference = member as MethodReference;
             if (methodReference != null) {
                 var defenition = methodReference.Resolve();
-                retValue = methods.Contains(defenition);
+                retValue = Methods.ContainsKey(defenition);
             }
 
             var fieldReference = member as FieldReference;
             if (fieldReference != null) {
                 var defenition = fieldReference.Resolve();
-                retValue = fields.Contains(defenition);
+                retValue = Fields.Contains(defenition);
             }
 
             var propertyReference = member as PropertyReference;
