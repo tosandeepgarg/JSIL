@@ -19,7 +19,8 @@
                 AnalyzerSettings = { { "DeadCodeAnalyzer", new Dictionary<string, object>
                 {
                     { "DeadCodeElimination", true },
-                    { "WhiteList", new List<string> { @"System\.Void Program::Main\(System.String\[\]\)" } }
+                    { "NonAggressiveVirtualMethodElimination", false },
+                    { "WhiteList", new List<string> { @"System\.Void Program::Main\(.*\)" } }
                 } } }
             };
             defaultConfiguration.MergeInto(config);
@@ -212,6 +213,39 @@
             StringAssert.Contains("UsedMiddleDerivedType.Method - used", output, "UsedMiddleDerivedType.Method eliminated, should be preserved");
             StringAssert.Contains("UsedDerivedType.Method - used", output, "UsedDerivedType.Method eliminated, should be preserved");
             StringAssert.DoesNotContain("DerivedTypeWithoudMethodUsage.Method - used", output, "DerivedTypeWithoudMethodUsage.Method preserved, should be eliminated");
+
+            StringAssert.Contains("BaseClassWithPreservedMethod.Method - used", output, "BaseClassWithPreservedMethod.Method eliminated, should be preserved");
+        }
+
+        [Test]
+        public void PreserveUsageThroughConstraint()
+        {
+            var output = GetJavascriptWithDCE(@"DCETests\PreserveUsageThroughConstraint.cs");
+
+            DceAssert.Has(output, MemberType.Interface, "IIterfaceForGenericMethodTest", false);
+            DceAssert.Has(output, MemberType.Interface, "IIterfaceForGenericClassTest", false);
+        }
+
+        [Test]
+        public void PreserveTypesReferencedFromGenericField()
+        {
+            var output = GetJavascriptWithDCE(@"DCETests\PreserveTypesReferencedFromGenericField.cs");
+
+            DceAssert.Has(output, MemberType.Class, "NonGenericType", false);
+        }
+
+        [Test]
+        public void Attributes()
+        {
+            var output = GetJavascriptWithDCE(@"DCETests\Attributes.cs");
+            DceAssert.Has(output, MemberType.Class, "TestAttribute", false);
+            StringAssert.Contains("Test arg", output, "TestAttribute application eliminated, should be preserved");
+            StringAssert.Contains("TestEnum.A", output, "TestAttribute application eliminated, should be preserved");
+            StringAssert.Contains("D_Usage", output, "TestEnum eliminated, should be preserved");
+
+            DceAssert.HasNo(output, MemberType.Mention, "UnusedAttribute", false);
+            StringAssert.DoesNotContain("Unused arg", output, "UnusedAttribute application preserved, should be eliminated");
+            StringAssert.DoesNotContain("C_Usage", output, "UnusedEnum preserved, should be eliminated");
         }
     }
 
