@@ -454,6 +454,13 @@ namespace JSIL.Ast {
             }
         }
 
+        public override bool IsLValue {
+            get {
+                // FIXME: Always?
+                return true;
+            }
+        }
+
         public override TypeReference GetActualType (TypeSystem typeSystem) {
             return new ByReferenceType(Referent.GetActualType(typeSystem));
         }
@@ -689,6 +696,13 @@ namespace JSIL.Ast {
 
             return typeSystem.Void;
         }
+
+        public override bool IsLValue {
+            get {
+                // FIXME
+                return true;
+            }
+        }
     }
 
     public class JSIgnoredTypeReference : JSIgnoredExpression {
@@ -882,6 +896,13 @@ namespace JSIL.Ast {
             : base(target, member) {
         }
 
+        public override bool IsLValue {
+            get {
+                // HACK
+                return Member.IsLValue;
+            }
+        }
+
         public static JSDotExpression New (JSExpression leftMost, params JSIdentifier[] memberNames) {
             if ((memberNames == null) || (memberNames.Length == 0))
                 throw new ArgumentException("memberNames");
@@ -944,6 +965,12 @@ namespace JSIL.Ast {
             }
         }
 
+        public override bool IsLValue {
+            get {
+                return true;
+            }
+        }
+
         public override TypeReference GetActualType (TypeSystem typeSystem) {
             return Field.Field.FieldType;
         }
@@ -982,6 +1009,12 @@ namespace JSIL.Ast {
         public JSProperty Property {
             get {
                 return (JSProperty)Values[1];
+            }
+        }
+
+        public override bool IsLValue {
+            get {
+                return true;
             }
         }
 
@@ -1035,6 +1068,12 @@ namespace JSIL.Ast {
         public JSExpression Index {
             get {
                 return Values[1];
+            }
+        }
+
+        public override bool IsLValue {
+            get {
+                return true;
             }
         }
 
@@ -1774,6 +1813,7 @@ namespace JSIL.Ast {
             op, actualType, lhs, rhs
         ) {
             CanSimplify = canSimplify;
+            CheckInvariant();
         }
 
         protected JSBinaryOperatorExpression (
@@ -1781,6 +1821,21 @@ namespace JSIL.Ast {
         ) : base(
             op, actualType, new[] { lhs, rhs }.Concat(extraValues).ToArray()
         ) {
+            CheckInvariant();
+        }
+
+        public override void ReplaceChild (JSNode oldChild, JSNode newChild) {
+            base.ReplaceChild(oldChild, newChild);
+
+            CheckInvariant();
+        }
+
+        protected virtual void CheckInvariant () {
+            if (!(Operator is JSAssignmentOperator))
+                return;
+
+            if (!Left.IsLValue)
+                throw new InvalidOperationException("LHS of an assignment expression must be an L-value" + Left);
         }
 
         public JSExpression Left {
@@ -1804,6 +1859,12 @@ namespace JSIL.Ast {
         public override bool HasGlobalStateDependency {
             get {
                 return Left.HasGlobalStateDependency || Right.HasGlobalStateDependency;
+            }
+        }
+
+        public override bool IsLValue {
+            get {
+                return (Operator is JSAssignmentOperator) && (Left.IsLValue);
             }
         }
 
@@ -1849,6 +1910,22 @@ namespace JSIL.Ast {
 
         public JSUnaryOperatorExpression (JSUnaryOperator op, JSExpression expression, TypeReference actualType)
             : base(op, actualType, expression) {
+
+            CheckInvariant();
+        }
+
+        public override void ReplaceChild (JSNode oldChild, JSNode newChild) {
+            base.ReplaceChild(oldChild, newChild);
+
+            CheckInvariant();
+        }
+
+        private void CheckInvariant () {
+            if (!(Operator is JSUnaryMutationOperator))
+                return;
+
+            if (!Expression.IsLValue)
+                throw new InvalidOperationException("Target of an unary mutation expression must be an L-value: " + Expression);
         }
 
         public bool IsPostfix {
@@ -2450,6 +2527,9 @@ namespace JSIL.Ast {
             ) {
         }
 
+        protected override void CheckInvariant () {
+        }
+
         public override string ToString () {
             return String.Format("{0}.set({1})", Left, Right);
         }
@@ -2613,6 +2693,9 @@ namespace JSIL.Ast {
             ) {
         }
 
+        protected override void CheckInvariant () {
+        }
+
         public JSExpression Pointer {
             get {
                 return Values[0];
@@ -2669,6 +2752,13 @@ namespace JSIL.Ast {
         public JSExpression OffsetInElements {
             get {
                 return Values[2];
+            }
+        }
+
+        public override bool IsLValue {
+            get {
+                // HACK
+                return true;
             }
         }
 

@@ -407,7 +407,9 @@ namespace JSIL {
                     FullyQualifyAmbiguousTypeNames = true,
                     ForEachStatement = false,
                     ExpressionTrees = false,
-                    ObjectOrCollectionInitializers = false
+                    ObjectOrCollectionInitializers = false,
+                    // FIXME
+                    MakeCompoundAssignmentExpressions = true
                 }
             };
         }
@@ -2301,7 +2303,7 @@ namespace JSIL {
             //  from the real cctor (if the type has one)
             var realCctor = typedef.Methods.FirstOrDefault((m) => m.Name == ".cctor");
             if ((realCctor != null) && (realCctor.HasBody)) {
-                fieldSelfIdentifier = new JSStringIdentifier("$pi", realCctor.DeclaringType);
+                fieldSelfIdentifier = new JSStringIdentifier("$pi", realCctor.DeclaringType, true);
 
                 // Do the simplest possible IL disassembly of the static cctor, 
                 //  because all we're looking for is static field assignments.

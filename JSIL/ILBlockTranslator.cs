@@ -445,7 +445,7 @@ namespace JSIL {
 
                     result = new JSBinaryOperatorExpression(
                         op,
-                        new JSDotExpression(lhs, new JSStringIdentifier("offsetInBytes", TypeSystem.Int32)),
+                        new JSDotExpression(lhs, new JSStringIdentifier("offsetInBytes", TypeSystem.Int32, true)),
                         rhs,
                         TypeSystem.Boolean
                     );
@@ -853,7 +853,7 @@ namespace JSIL {
                         var expression = arguments[0] as JSStringLiteral;
                         if (expression != null)
                             return new JSDotExpression(
-                                JSIL.GlobalNamespace, new JSStringIdentifier(expression.Value, TypeSystem.Object)
+                                JSIL.GlobalNamespace, new JSStringIdentifier(expression.Value, TypeSystem.Object, true)
                             );
                         else
                             return new JSIndexerExpression(
@@ -871,7 +871,7 @@ namespace JSIL {
                         if (expression == null)
                             throw new InvalidOperationException("JSLocal must recieve a string literal as an index");
 
-                        return new JSStringIdentifier(expression.Value, TypeSystem.Object);
+                        return new JSStringIdentifier(expression.Value, TypeSystem.Object, true);
                     } else {
                         throw new NotImplementedException("JSLocal method not implemented: " + methodName);
                     }
@@ -1903,11 +1903,10 @@ namespace JSIL {
                 );
             } else if ((invocation != null) && invocation.JSMethod.Identifier.StartsWith("op_")) {
                 // Binary operator using a custom operator method
-                var lhs = invocation.Arguments[0];
+                var lhs = DecomposeMutationOperators.MakeLhsForAssignment(invocation.Arguments[0]);
 
                 result = new JSBinaryOperatorExpression(
-                    JSOperator.Assignment,
-                    DecomposeMutationOperators.MakeLhsForAssignment(lhs), 
+                    JSOperator.Assignment, lhs,
                     invocation, invocation.GetActualType(TypeSystem)
                 );
             } else {
@@ -2163,7 +2162,7 @@ namespace JSIL {
 
         protected JSThrowExpression Translate_Rethrow (ILExpression node) {
             return new JSThrowExpression(new JSStringIdentifier(
-                "$exception", new TypeReference("System", "Exception", TypeSystem.Object.Module, TypeSystem.Object.Scope)
+                "$exception", new TypeReference("System", "Exception", TypeSystem.Object.Module, TypeSystem.Object.Scope), true
             ));
         }
 
@@ -2348,14 +2347,16 @@ namespace JSIL {
             return new JSMemberReferenceExpression(result);
         }
 
-        protected JSBinaryOperatorExpression Translate_Stsfld (ILExpression node, FieldReference field) {
+        protected JSExpression Translate_Stsfld (ILExpression node, FieldReference field) {
+            var lhs = DecomposeMutationOperators.MakeLhsForAssignment(Translate_FieldAbstract(node, field, true));
             var rhs = TranslateNode(node.Arguments[0]);
+
+            if ((lhs is JSUntranslatableExpression) || (rhs is JSUntranslatableExpression))
+                return new JSUntranslatableExpression(node);
 
             return new JSBinaryOperatorExpression(
                 JSOperator.Assignment,
-                DecomposeMutationOperators.MakeLhsForAssignment(Translate_FieldAbstract(node, field, true)),
-                rhs,
-                rhs.GetActualType(TypeSystem)
+                lhs, rhs, rhs.GetActualType(TypeSystem)
             );
         }
 
