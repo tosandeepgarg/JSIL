@@ -40,6 +40,15 @@ JSIL.ImplementExternals("System.Convert", function ($) {
     return b ? "True" : "False";
   };
 
+  var numToDecimalAdapter = function (adapter) {
+    if (!adapter)
+      JSIL.RuntimeError("No adapter provided");
+
+    return function (value) {
+      return new System.Decimal(adapter(value));
+    }
+  }
+
   var makeConvertMethods = function (typeName, to, from) {
     // FIXME: We currently ignore the format provider argument
     // FIXME: Range checks/clipping/saturation are not performed for the integer types
@@ -113,18 +122,6 @@ JSIL.ImplementExternals("System.Convert", function ($) {
         return JSIL.DefaultValue(toType);
       }
 
-      if ($jsilcore.System.IConvertible.$Is(value)) {
-        var conversionMethod = $jsilcore.System.IConvertible["To" + typeName];
-
-        if (conversionMethod) {
-          return conversionMethod.Call(value, null, null);
-        }
-      }
-
-      if (to === $.String) {
-        return value.toString();
-      }
-
       if ($jsilcore.System.String.$Is(value))
         return from.string(value);
       else if (from.int64 && $jsilcore.System.Int64.$Is(value))
@@ -139,6 +136,16 @@ JSIL.ImplementExternals("System.Convert", function ($) {
         return from.boolean(value);
       else if ($jsilcore.System.Double.$Is(value))
         return from.float(value);
+      else if ($jsilcore.System.IConvertible.$Is(value)) {
+        var conversionMethod = $jsilcore.System.IConvertible["To" + typeName];
+
+        if (conversionMethod) {
+          return conversionMethod.Call(value, null, null);
+        }
+      }
+      else if (to === $.String) {
+        return value.toString();
+      }
       else
         throw new System.NotImplementedException(
           "Conversion from type '" + JSIL.GetType(value) + "' to type '" + typeName + "' not implemented."
@@ -290,6 +297,16 @@ JSIL.ImplementExternals("System.Convert", function ($) {
     int64: returnValueOf,
     uint64: returnValueOf,
     string: makeAdapter($jsilcore.$ParseFloat)
+  });
+
+  makeConvertMethods("Decimal", $jsilcore.TypeRef("System.Decimal"), {
+    boolean: numToDecimalAdapter(boolToInt),
+    uint: numToDecimalAdapter(returnSame),
+    int: numToDecimalAdapter(returnSame),
+    float: numToDecimalAdapter(returnSame),
+    int64: numToDecimalAdapter(returnValueOf),
+    uint64: numToDecimalAdapter(returnValueOf),
+    string: numToDecimalAdapter($jsilcore.$ParseFloat)
   });
 
   makeConvertMethods("Char", $.Char, {
