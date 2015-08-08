@@ -96,42 +96,6 @@ namespace JSIL.Proxies.Bcl
     {
     }
 
-    [JSProxy(typeof(List<>), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
-    [JSStubOnly]
-    public class System_Collections_Generic_List_1
-    {
-    }
-
-    [JSProxy(typeof(ArrayList), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
-    [JSStubOnly]
-    public class System_Collections_ArrayList
-    {
-    }
-
-    [JSProxy(typeof(Collection<>), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
-    [JSStubOnly]
-    public class System_Collections_ObjectModel_Collection_1
-    {
-    }
-
-    [JSProxy(typeof(ReadOnlyCollection<>), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
-    [JSStubOnly]
-    public class System_Collections_ObjectModel_ReadOnlyCollection_1
-    {
-    }
-
-
-    [JSProxy(typeof(Stack<>), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
-    [JSStubOnly]
-    public class System_Collections_Generic_Stack_1
-    {
-    }
-
-    [JSProxy(typeof(Queue<>), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
-    [JSStubOnly]
-    public class System_Collections_Generic_Queue_1
-    {
-    }
 
     [JSProxy(typeof(Interlocked), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
     [JSStubOnly]
@@ -263,6 +227,25 @@ namespace JSIL.Proxies.Bcl
     [JSProxy("System.Threading.Volatile", JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
     [JSStubOnly]
     public class System_Threading_Volatile
+    {
+    }
+
+    [JSProxy(typeof(EqualityComparer<>), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared,
+JSProxyInterfacePolicy.ReplaceNone, false)]
+    [JSStubOnly]
+    public class System_Collections_Generic_EqualityComparer_1
+    {
+    }
+
+    [JSProxy(typeof(BitArray), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
+    [JSStubOnly]
+    public static class System_BitArray
+    {
+    }
+
+    [JSProxy(typeof(Uri), JSProxyMemberPolicy.ReplaceNone, JSProxyAttributePolicy.ReplaceDeclared, JSProxyInterfacePolicy.ReplaceNone, false)]
+    [JSStubOnly]
+    public static class System_Uri
     {
     }
 }
