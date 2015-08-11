@@ -131,7 +131,7 @@ EXIT /b 1
     </PreBuildEvent>
   </PropertyGroup>
   <PropertyGroup>
-    <PostBuildEvent>copy "$(ProjectDir)\..\Upstream\Spidermonkey\*.*" "$(OutDir)"
+    <PostBuildEvent Condition="'$(OS)' != 'Unix'">copy "$(ProjectDir)\..\Upstream\Spidermonkey\*.*" "$(OutDir)"
 copy "$(ProjectDir)\..\Upstream\PNGQuant\*.dll" "$(OutDir)"
 copy "$(ProjectDir)\..\Upstream\PNGQuant\*.exe" "$(OutDir)"
     </PostBuildEvent>
