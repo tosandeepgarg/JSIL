@@ -305,15 +305,18 @@ namespace JSIL.Tests {
                 try {
                     output = test.RunJavascript(new string[0], out generatedJs, out temp, out elapsed, makeConfiguration ?? MakeConfiguration, initializeTranslator: initializeTranslator);
                 } catch {
-                    if (dumpJsOnFailure) {
-                        // Failures in very large programs can totally choke the test runner
-                        const int limit = 1024 * 16;
+                    if (Environment.GetEnvironmentVariable("suppressTestOutput") == string.Empty) {
+                        if (dumpJsOnFailure)
+                        {
+                            // Failures in very large programs can totally choke the test runner
+                            const int limit = 1024*16;
 
-                        var truncated = generatedJs;
-                        if (truncated.Length > limit)
-                            truncated = truncated.Substring(0, limit);
+                            var truncated = generatedJs;
+                            if (truncated.Length > limit)
+                                truncated = truncated.Substring(0, limit);
 
-                        Console.Error.WriteLine("// Generated JS: \r\n{0}", truncated);
+                            Console.Error.WriteLine("// Generated JS: \r\n{0}", truncated);
+                        }
                     }
                     throw;
                 }
@@ -351,7 +354,10 @@ namespace JSIL.Tests {
 
                     Assert.AreEqual(Portability.NormalizeNewLines(javascriptOutput), jsOutput.Trim(), "Did not get expected output from JavaScript test");
                 } catch {
-                    Console.Error.WriteLine("// Generated JS: \r\n{0}", generatedJs);
+                    if (Environment.GetEnvironmentVariable("suppressTestOutput") == string.Empty)
+                    {
+                        Console.Error.WriteLine("// Generated JS: \r\n{0}", generatedJs);
+                    }
                     throw;
                 }
             }
@@ -382,13 +388,19 @@ namespace JSIL.Tests {
 
                     if (!foundMatch) {
                         Console.Error.WriteLine("// Was looking for a JS exception containing the string '{0}' but didn't find it.", jsErrorSubstring);
-                        Console.Error.WriteLine("// Generated JS: \r\n{0}", generatedJs);
+                        if (Environment.GetEnvironmentVariable("suppressTestOutput") == string.Empty)
+                        {
+                            Console.Error.WriteLine("// Generated JS: \r\n{0}", generatedJs);
+                        }
                         if (jsOutput != null)
                             Console.Error.WriteLine("// JS output: \r\n{0}", jsOutput);
                         throw;
                     }
                 } catch {
-                    Console.Error.WriteLine("// Generated JS: \r\n{0}", generatedJs);
+                    if (Environment.GetEnvironmentVariable("suppressTestOutput") == string.Empty)
+                    {
+                        Console.Error.WriteLine("// Generated JS: \r\n{0}", generatedJs);
+                    }
                     if (jsOutput != null)
                         Console.Error.WriteLine("// JS output: \r\n{0}", jsOutput);
                     throw;
