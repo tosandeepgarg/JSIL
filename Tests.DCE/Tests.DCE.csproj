@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>JSIL.Tests.DCE</RootNamespace>
     <AssemblyName>Tests.DCE</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <OutputPath>..\bin\</OutputPath>
     <PlatformTarget>AnyCPU</PlatformTarget>
