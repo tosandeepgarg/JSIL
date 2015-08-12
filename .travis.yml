@@ -15,7 +15,7 @@ install:
   - cd ..
   
 script:
-  - xbuild /p:Configuration=Release /v:q JSIL_NoXNA_NoLibraries.sln
+  - xbuild /p:Configuration=Release JSIL_NoXNA_NoLibraries.sln
   - cd JSIL.Libraries
   - npm test
   - cd ..
