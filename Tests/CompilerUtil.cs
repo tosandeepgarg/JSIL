@@ -232,6 +232,19 @@ namespace JSIL.Tests {
             var compileWarnings = (from ce in compileErrorsAndWarnings where ce.IsWarning select ce).ToArray();
             var compileErrors = (from ce in compileErrorsAndWarnings where !ce.IsWarning select ce).ToArray();
 
+            // Mono doesn't set IsWarning flag;
+            try
+            {
+                if (results.CompiledAssembly != null)
+                {
+                    compileWarnings = compileErrorsAndWarnings;
+                    compileErrors = new CompilerError[0];
+                }
+            }
+            catch (Exception)
+            {
+            }
+
             if (compileWarnings.Length > 0) {
                 var warningText = String.Format(
                     "// C# Compiler warning(s) follow //\r\n{0}\r\n// End of C# compiler warning(s) //",
@@ -251,7 +264,7 @@ namespace JSIL.Tests {
             if (compileErrors.Length > 0) {
                 throw new Exception(
                     String.Join(Environment.NewLine, compileErrors.Select(Convert.ToString).ToArray())
-                );
+                    );
             }
 
             WriteCompileManifest(filenames, tempPath);
