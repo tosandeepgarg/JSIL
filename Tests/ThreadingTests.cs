@@ -252,7 +252,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [Category("B")]
+        [FailsOnMono]
         public void WaitDoesNotThrowTheSecondTimeForAGivenThread () {
             var l = new TrackedLock(Locks, "A");
 
@@ -307,7 +307,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [Category("C")]
+        [FailsOnMono]
         public void RecursiveAcquireOnSameThreadWorks () {
             var l = new TrackedLock(Locks, "A");
 
