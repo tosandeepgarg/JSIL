@@ -232,17 +232,21 @@ namespace JSIL.Tests {
             var compileWarnings = (from ce in compileErrorsAndWarnings where ce.IsWarning select ce).ToArray();
             var compileErrors = (from ce in compileErrorsAndWarnings where !ce.IsWarning select ce).ToArray();
 
-            // Mono doesn't set IsWarning flag;
-            try
+            // Mono incorrectly trats some warnings as errors;
+            if (Type.GetType("Mono.Runtime") != null)
             {
-                if (results.CompiledAssembly != null)
+                if (compileErrors.Length > 0 && File.Exists(outputAssembly))
                 {
-                    compileWarnings = compileErrorsAndWarnings;
-                    compileErrors = new CompilerError[0];
+                    try
+                    {
+                        results.CompiledAssembly = Assembly.LoadFrom(outputAssembly);
+                        compileErrors = new CompilerError[0];
+                        compileWarnings = compileErrorsAndWarnings;
+                    }
+                    catch (Exception)
+                    {
+                    }
                 }
-            }
-            catch (Exception)
-            {
             }
 
             if (compileWarnings.Length > 0) {
