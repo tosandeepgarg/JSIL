@@ -160,10 +160,10 @@ namespace JSIL.Tests {
 
             JSFilenames = null;
 
-            AssemblyAppDomain = AppDomain.CreateDomain("TestAssemblyDomain", null, new AppDomainSetup
+            AssemblyAppDomain = AppDomain.CurrentDomain; /*AppDomain.CreateDomain("TestAssemblyDomain", null, new AppDomainSetup
             {
                 ApplicationBase = AppDomain.CurrentDomain.BaseDirectory,
-            });
+            });*/
 
             switch (extensions[0]) {
                 case ".exe":
