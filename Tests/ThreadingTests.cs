@@ -35,6 +35,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
+        [FailsOnMono]
         public void AcquireAndRelease () {
             var l = new TrackedLock(Locks, "A");
 
@@ -45,6 +46,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
+        [FailsOnMono]
         public void DisposeLock () {
             var l = new TrackedLock(Locks, "A");
 
@@ -56,6 +58,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
+        [FailsOnMono]
         public void DisposeLockCollection () {
             var l = new TrackedLock(Locks, "A");
 
@@ -67,6 +70,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
+        [FailsOnMono]
         public void HeldLockTracking () {
             var l = new TrackedLock(Locks, "A");
 
@@ -80,6 +84,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
+        [FailsOnMono]
         public void AcquireOnSameThreadFails () {
             var l = new TrackedLock(Locks, "A");
 
@@ -92,6 +97,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
+        [FailsOnMono]
         public void AcquireOnOtherThreadFails () {
             var l = new TrackedLock(Locks, "A");
 
