@@ -115,7 +115,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [Category("A")]
+        [FailsOnMono]
         public void WaitBlocksUntilReleased () {
             var log = new List<string>();
             var l = new TrackedLock(Locks, "A");
@@ -162,7 +162,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [Category("A")]
+        [FailsOnMono]
         public void WaitThrowsIfAlreadyHeld () {
             var l = new TrackedLock(Locks, "A");
 
@@ -174,7 +174,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [Category("A")]
+        [FailsOnMono]
         public void WaitThrowsIfSimpleDeadlockWouldHaveOccurred () {
             var lA = new TrackedLock(Locks, "A");
             var lB = new TrackedLock(Locks, "B");
@@ -205,7 +205,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [Category("B")]
+        [Category("A")]
         public void WaitThrowsIfNestedDeadlockWouldHaveOccurred () {
             var lA = new TrackedLock(Locks, "A");
             var lB = new TrackedLock(Locks, "B");
@@ -307,7 +307,7 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [Category("B")]
+        [Category("C")]
         public void RecursiveAcquireOnSameThreadWorks () {
             var l = new TrackedLock(Locks, "A");
 
