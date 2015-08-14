@@ -16,7 +16,6 @@ namespace JSIL.Tests {
         }
 
         [Test]
-        [FailsOnMono]
         public void JSReplacementTypeOfThisStatic () {
             GenericTest(
                 @"SpecialTestCases\JSReplacementTypeOfThisStatic.cs",
