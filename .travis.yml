@@ -8,6 +8,7 @@ before_install:
   
 install:
   - export NODEJS=$(dirname `nvm which $NODEJS_VERSION`)
+  - nuget restore JSIL_NoXNA.sln
   - nuget install NUnit.Runners -Version 2.6.4 -OutputDirectory testrunner 
   - cd JSIL.Libraries
   - npm install 
