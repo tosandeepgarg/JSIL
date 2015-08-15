@@ -5,7 +5,7 @@
   <Import Project="..\packages\MSBuild.Node.0.4.4\build\MSBuild.Node.props" Condition="Exists('..\packages\MSBuild.Node.0.4.4\build\MSBuild.Node.props')" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
-    <LocalNodePath>.bin</LocalNodePath>
+    <LocalNodePath  Condition="'$(OS)' != 'Unix'">.bin</LocalNodePath>
     <LocalNodeModulePath>$(MSBuildProjectDirectory)\node_modules\.bin</LocalNodeModulePath>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
