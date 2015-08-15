@@ -5,7 +5,7 @@
   <Import Project="..\packages\MSBuild.Node.0.4.4\build\MSBuild.Node.props" Condition="Exists('..\packages\MSBuild.Node.0.4.4\build\MSBuild.Node.props')" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
-    <LocalNodePath  Condition="'$(OS)' != 'Unix'">.bin</LocalNodePath>
+    <LocalNodePath Condition="'$(OS)' != 'Unix'">.bin</LocalNodePath>
     <LocalNodeModulePath>$(MSBuildProjectDirectory)\node_modules\.bin</LocalNodeModulePath>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -48,7 +48,7 @@
     <None Include=".bin\git.cmd" />
     <None Include=".bin\node.cmd" />
     <None Include=".bin\npm.cmd" />
-    <Content Include="gruntfile.js" />
+    <Content Include="Gruntfile1.js" />
     <Content Include="Includes\Bootstrap\Core\Classes\System.Collections.Generic.EqualityComparer.js" />
     <Content Include="Includes\Bootstrap\Core\Utils\%24jsilcore.%24ParseBoolean.js" />
     <Content Include="Includes\Bootstrap\Core\Utils\%24jsilcore.InitResizableArray.js" />
