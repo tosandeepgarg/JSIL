@@ -11,6 +11,8 @@ using Microsoft.CSharp;
 using Microsoft.VisualBasic;
 
 namespace JSIL.Tests {
+    using System.Runtime.Serialization;
+
     public static class CompilerUtil {
         public static string TempPath;
 
@@ -230,6 +232,23 @@ namespace JSIL.Tests {
             var compileWarnings = (from ce in compileErrorsAndWarnings where ce.IsWarning select ce).ToArray();
             var compileErrors = (from ce in compileErrorsAndWarnings where !ce.IsWarning select ce).ToArray();
 
+            // Mono incorrectly trats some warnings as errors;
+            if (Type.GetType("Mono.Runtime") != null)
+            {
+                if (compileErrors.Length > 0 && File.Exists(outputAssembly))
+                {
+                    try
+                    {
+                        results.CompiledAssembly = Assembly.LoadFrom(outputAssembly);
+                        compileErrors = new CompilerError[0];
+                        compileWarnings = compileErrorsAndWarnings;
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+            }
+
             if (compileWarnings.Length > 0) {
                 var warningText = String.Format(
                     "// C# Compiler warning(s) follow //\r\n{0}\r\n// End of C# compiler warning(s) //",
@@ -271,9 +290,22 @@ namespace JSIL.Tests {
         }
     }
 
+    [Serializable]
     public class CompilerNotFoundException : Exception
     {
+        public CompilerNotFoundException()
+        {
+        }
+
         public CompilerNotFoundException(string message) : base(message)
+        {
+        }
+
+        public CompilerNotFoundException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        protected CompilerNotFoundException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
     }
